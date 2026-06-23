@@ -1,12 +1,12 @@
-# 🦮 beaglebone-gmediarender-valera
+# beaglebone-gmediarender-valera
 
-## 🛠 Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
+## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
 
 An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
 architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as USB
 transports or esoteric cables).
 
-### 📌 Key Steps & Engineering Solutions:
+### Key Steps & Engineering Solutions:
 
 1. **Base Image:** Built on a standard, field-tested **Debian** distribution suitable for BeagleBone boards.
 2. **Hardware Binding (Direct Bus/I2S):** The UPnP/DLNA stream is delivered directly to the sound subsystem (ALSA) via
@@ -20,7 +20,7 @@ transports or esoteric cables).
 5. **Architectural Monolith (Optional):** For maximum long-term reliability, the workflow supports a low-level system
    migration from fragile MicroSD cards to the industrial onboard eMMC flash memory.
 
-|             🔋 1. Embedded Board              |                📡 2. Media Controller                 |                    🎛️ 3. Hardware DAC                    |
+|               1. Embedded Board               |                     2. Media App                      |                        3. Endpoint                        |
 |:---------------------------------------------:|:-----------------------------------------------------:|:---------------------------------------------------------:|
 | ![BeagleBone-Green.png](BeagleBone-Green.png) | ![valera-in-foobar2000.png](valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](valera-in-topping-mx3s.png) |
 
@@ -34,7 +34,6 @@ transports or esoteric cables).
 
 ```bash
 sudo dd if=/path/to/debian-image.img of=/dev/sdX bs=4M status=progress conv=fsync
-
 ```
 
 *(Replace `/dev/sdX` with your actual SD card drive letter).*
@@ -47,7 +46,6 @@ sudo dd if=/path/to/debian-image.img of=/dev/sdX bs=4M status=progress conv=fsyn
 
 ```bash
 ssh debian@beaglebone.local
-
 ```
 
 *(Default password is `temppwd` if not changed).*
@@ -77,14 +75,12 @@ follow these hardware and software steps:
 7. Unplug the power, **remove the microSD card** from the slot, and plug the power back in. The board will now boot
    purely from its internal eMMC memory.
 
-
-## 🛠️ Installation & Deployment
+## Installation & Deployment
 
 1. **Create the deployment script** on your BeagleBone:
 
 ```bash
    nano valera_deploy.py
-
 ```
 
 *(Paste the pure Python code into the file and save via Ctrl+O, Enter, Ctrl+X)*
@@ -93,31 +89,24 @@ follow these hardware and software steps:
 
 ```bash
 chmod +x valera_deploy.py
-
 ```
 
 3. **Execute the automation pipeline:**
 
 ```bash
 sudo ./valera_deploy.py
-
 ```
 
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart, and waiting for your
 media stream.
 
----
+## foobar2000 Configuration
 
-## 🎛️ Audio Controller Configuration (foobar2000)
+1. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **BeagleBone Topping**.
+2. Set the output bit depth strictly to **32-bit** to ensure clean DSF container passing.
+3. Fire up your heavy metal stream and enjoy pure hardware rendering.
 
-1. Open your Windows Media Control or **foobar2000**.
-2. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **BeagleBone Topping**.
-3. Set the output bit depth strictly to **32-bit** to ensure clean DSF container passing.
-4. Fire up your heavy metal stream and enjoy pure hardware rendering.
-
----
-
-## 🔋 Hardware Maintenance Note
+## Hardware Maintenance Note
 
 * **24/7 Operation:** This is an industrial embedded setup. Power consumption is < 2W in peak. It is designed to run
   continuously without reboots.
