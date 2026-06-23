@@ -1,5 +1,9 @@
 # beaglebone-gmediarender-valera
 
+|               1. Embedded Board               |                     2. Media App                      |                        3. Endpoint                        |
+|:---------------------------------------------:|:-----------------------------------------------------:|:---------------------------------------------------------:|
+| ![BeagleBone-Green.png](BeagleBone-Green.png) | ![valera-in-foobar2000.png](valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](valera-in-topping-mx3s.png) |
+
 ## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
 
 An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
@@ -19,10 +23,6 @@ transports or esoteric cables).
    staging that outperforms commercial Hi-End streamers.
 5. **Architectural Monolith (Optional):** For maximum long-term reliability, the workflow supports a low-level system
    migration from fragile MicroSD cards to the industrial onboard eMMC flash memory.
-
-|               1. Embedded Board               |                     2. Media App                      |                        3. Endpoint                        |
-|:---------------------------------------------:|:-----------------------------------------------------:|:---------------------------------------------------------:|
-| ![BeagleBone-Green.png](BeagleBone-Green.png) | ![valera-in-foobar2000.png](valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](valera-in-topping-mx3s.png) |
 
 ### 1. Downloading and Flashing the Base Image to a microSD Card
 
