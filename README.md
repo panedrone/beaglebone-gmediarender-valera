@@ -4,7 +4,6 @@
 |:---------------------------------------------:|:-----------------------------------------------------:|:---------------------------------------------------------:|
 | ![BeagleBone-Green.png](BeagleBone-Green.png) | ![valera-in-foobar2000.png](valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](valera-in-topping-mx3s.png) |
 
-```markdown
 # 🦮 beaglebone-gmediarender-valera
 
 > Bit-perfect, ultra-low-latency 32-bit DLNA/UPnP Audio Renderer automated deployment tool for **BeagleBone** and *
@@ -15,7 +14,6 @@ Mladshoy** — a lightweight, bare-metal Python-driven deployment script built f
 classic `gmediarender` daemon, fixes sub-optimal ALSA routing, and stabilizes the pipeline to flawlessly stream heavy *
 *DSD/DSF (up to 32-bit)** and FLAC directly to your DAC without a single drop or jitter.
 
----
 
 ## 🚀 Features
 
@@ -34,7 +32,8 @@ classic `gmediarender` daemon, fixes sub-optimal ALSA routing, and stabilizes th
 ## 🛠️ Installation & Deployment
 
 1. **Create the deployment script** on your BeagleBone:
-   ```bash
+   
+```bash
    nano valera_deploy.py
 
 ```
@@ -78,4 +77,4 @@ media stream.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
   for 1-2 seconds. The system will safely unmount filesystems and shut down.
 
-```
+
