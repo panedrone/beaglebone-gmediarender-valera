@@ -32,27 +32,24 @@ ctl.!default {
 with open("/etc/asound.conf", "w") as f:
     f.write(asound_content)
 
-# 3. Create a clean, native systemd service unit
-print("\n⚙️ Step 3: Purging old configuration and injecting native systemd unit...")
-service_content = """[Unit]
-Description=GMediaRender Daemon (Valera Mladshoy Edition)
-After=network.target
+# 3. Create systemd override directory and inject drop-in configuration
+print("\n⚙️ Step 3: Injecting Topping Endpoint systemd override...")
+override_dir = "/etc/systemd/system/gmediarender.service.d"
+os.makedirs(override_dir, exist_ok=True)
 
-[Service]
-Type=simple
-ExecStart=/usr/bin/gmediarender -f "BeagleBone Topping" -o gst --gstout-audiosink=alsasink
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
+service_override_content = """[Service]
+ExecStart=
+ExecStart=/usr/bin/gmediarender -f "Topping Endpoint" -o gst --gstout-audiosink=alsasink
 """
-with open("/lib/systemd/system/gmediarender.service", "w") as f:
-    f.write(service_content)
 
-# 4. Trigger systemd reload, enable and ignite the daemon
-print("\n🔄 Step 4: Reloading systemd manager and enabling startup symlinks...")
+with open(os.path.join(override_dir, "override.conf"), "w") as f:
+    f.write(service_override_content)
+
+# 4. Trigger systemd reload, enable service and ignite the daemon
+print("\n🔄 Step 4: Reloading systemd manager and restarting daemon...")
 subprocess.run(["systemctl", "daemon-reload"])
-subprocess.run(["systemctl", "enable", "gmediarender"])
+subprocess.run(["systemctl", "enable", "gmediarender"], stderr=subprocess.DEVNULL)
+subprocess.run(["systemctl", "reset-failed", "gmediarender"])
 subprocess.run(["systemctl", "restart", "gmediarender"])
 
 # 5. Execute final health check
@@ -61,7 +58,7 @@ result = subprocess.run(["systemctl", "is-active", "gmediarender"], capture_outp
 
 if result.stdout.strip() == "active":
     print("\n🎉 GOAL!!! Valera Mladshoy has been successfully put into mass production!")
-    print("📡 Device 'BeagleBone Topping' is fully operational and locked on target.")
+    print("📡 Device 'Topping Endpoint' is fully operational and locked on target.")
     print("🎵 Set foobar2000 output to 32-bit and crank up the heavy metal stream!")
 else:
     print("\n🤔 Warning: Service injection succeeded, but daemon failed to ignite.")
