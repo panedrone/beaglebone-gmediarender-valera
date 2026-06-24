@@ -1,8 +1,8 @@
 # beaglebone-gmediarender-valera
 
-|               1. Embedded Board               |                     2. Media App                      |                        3. Endpoint                        |
-|:---------------------------------------------:|:-----------------------------------------------------:|:---------------------------------------------------------:|
-| ![BeagleBone-Green.png](BeagleBone-Green.png) | ![valera-in-foobar2000.png](valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](valera-in-topping-mx3s.png) |
+|                 1. Embedded Board                 |                       2. Media App                        |                          3. Endpoint                          |
+|:-------------------------------------------------:|:---------------------------------------------------------:|:-------------------------------------------------------------:|
+| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) |
 
 ## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
 
