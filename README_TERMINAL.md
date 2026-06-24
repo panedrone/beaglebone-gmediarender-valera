@@ -95,6 +95,16 @@ df -h
 
 ```
 
+    Filesystem      Size  Used Avail Use% Mounted on
+    udev            215M     0  215M   0% /dev
+    tmpfs            49M  5.3M   44M  11% /run
+    /dev/mmcblk1p1  3.5G  3.1G  230M  94% /
+    tmpfs           242M     0  242M   0% /dev/shm
+    tmpfs           5.0M  4.0K  5.0M   1% /run/lock
+    tmpfs           242M     0  242M   0% /sys/fs/cgroup
+    tmpfs            49M     0   49M   0% /run/user/0
+ 
+
 * **Inspect free RAM and system load average (ensuring < 0.1 during playback):**
 
 ```bash
