@@ -120,3 +120,8 @@ drop-in), and waiting for your media stream.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
   for 1-2 seconds. The system will safely unmount filesystems and shut down.
 
+Merciful Fate in here! an absolute bit-perfect, Hi-Res, Bare-Metal Pass-Through!
+
+|            Valera             |                  htop                   | Mercyful Fate in here! an absolute bit-perfect, bare-metal pass-through! |
+|:-----------------------------:|:---------------------------------------:|:------------------------------------------------------------------------:|
+| ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) |   ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg)    |
