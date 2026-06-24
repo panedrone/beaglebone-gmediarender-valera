@@ -7,13 +7,17 @@
 ## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
 
 An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
-architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as esoteric cables or uncontrolled sample-rate conversions).
+architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
+esoteric cables or uncontrolled sample-rate conversions).
 
 ### Key Steps & Engineering Solutions:
 
 1. **Base Image:** Built on a standard, field-tested **Debian** distribution suitable for BeagleBone boards.
-2. **Hardware Binding (Direct Bus/I2S):** The UPnP/DLNA stream is delivered directly via GStreamer pass-through (`-o gst --gstout-audiosink=alsasink`) hardcoded to routing (`hw:1,0`), completely bypassing unnecessary software resamplers.
-3. **Lifting Digital Constraints:** The endpoint initializes strictly at 100% volume (`--initial-volume=100`) at the daemon level to maintain an absolute bit-perfect stream over the network.
+2. **Hardware Binding (Direct Bus/I2S):** The UPnP/DLNA stream is delivered directly via GStreamer pass-through (
+   `-o gst --gstout-audiosink=alsasink`) hardcoded to routing (`hw:1,0`), completely bypassing unnecessary software
+   resamplers.
+3. **Lifting Digital Constraints:** The endpoint initializes strictly at 100% volume (`--initial-volume=100`) at the
+   daemon level to maintain an absolute bit-perfect stream over the network.
 4. **Uncompromising Power Supply:** Ditching noisy switched-mode power supplies and dirty mains in favor of a pure
    analog source (powerbank). This revealed true micro-dynamics, eliminated jitter, and achieved crystal-clear sound
    staging that outperforms commercial Hi-End streamers.
@@ -58,8 +62,8 @@ follow these hardware and software steps:
 1. Boot the board from your microSD card.
 2. Open the `/boot/uEnv.txt` file using a text editor (e.g., `sudo nano /boot/uEnv.txt`).
 3. Find the line referring to `beagle-flasher` or the eMMC flasher and uncomment it (remove the `#` at the beginning),
-or add the flasher override depending on the kernel version documentation found in
-the [BeagleBoard eMMC Flashing Guide](https://www.google.com/search?q=https://docs.beagleboard.org/latest/boards/beaglebone/ai/ch06.html).
+   or add the flasher override depending on the kernel version documentation found in
+   the [BeagleBoard eMMC Flashing Guide](https://www.google.com/search?q=https://docs.beagleboard.org/latest/boards/beaglebone/ai/ch06.html).
 4. Save the file and reboot the board. The system will automatically flash itself to the eMMC.
 
 **Method B: Hardware Boot Button Trigger (Classic approach)**
@@ -71,7 +75,7 @@ the [BeagleBoard eMMC Flashing Guide](https://www.google.com/search?q=https://do
 5. The LEDs will start chasing/flashing sequentially, indicating the eMMC is being programmed from the SD card.
 6. Wait for the LEDs to turn off or stop flashing entirely (this can take up to 10–15 minutes).
 7. Unplug the power, **remove the microSD card** from the slot, and plug the power back in. The board will now boot
-purely from its internal eMMC memory.
+   purely from its internal eMMC memory.
 
 ## Installation & Deployment
 
@@ -98,7 +102,8 @@ sudo ./valera_deploy.py
 
 ```
 
-When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as an override drop-in), and waiting for your media stream.
+When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as an override
+drop-in), and waiting for your media stream.
 
 ## foobar2000 Configuration
 
@@ -109,9 +114,9 @@ When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, 
 ## Hardware Maintenance Note
 
 * **24/7 Operation:** This is an industrial embedded setup. Power consumption is < 2W in peak. It is designed to run
-continuously without reboots.
+  continuously without reboots.
 * **Battery DC Power Option:** For an ultra-clean, noise-free DC source, run the hardware from a powerbank. Ensure the
-powerbank features a "low-current/always-on" mode to prevent automated sleep intervals during track changes.
+  powerbank features a "low-current/always-on" mode to prevent automated sleep intervals during track changes.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
-for 1-2 seconds. The system will safely unmount filesystems and shut down.
+  for 1-2 seconds. The system will safely unmount filesystems and shut down.
 
