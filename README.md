@@ -1,5 +1,19 @@
 # beaglebone-gmediarender-valera
 
+## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
+
+An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
+architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
+esoteric cables or uncontrolled sample-rate conversions).
+
+|                 1. Embedded Board                 |                       2. Media App                        |                          3. Endpoint                          |
+|:-------------------------------------------------:|:---------------------------------------------------------:|:-------------------------------------------------------------:|
+| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) |
+
+|            Valera             |                  htop                   | Mercyful Fate in here! an absolute bit-perfect, bare-metal pass-through! |
+|:-----------------------------:|:---------------------------------------:|:------------------------------------------------------------------------:|
+| ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) |   ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg)    |
+
 ### Key Steps & Engineering Solutions:
 
 1. **Base Image & Internal Memory Storage:** Built on a standard, field-tested **Debian** distribution deployed directly
@@ -14,16 +28,6 @@
    analog source (powerbank). This revealed true micro-dynamics, eliminated jitter, and achieved crystal-clear sound
    staging that outperforms commercial Hi-End streamers.
 
-|                 1. Embedded Board                 |                       2. Media App                        |                          3. Endpoint                          |
-|:-------------------------------------------------:|:---------------------------------------------------------:|:-------------------------------------------------------------:|
-| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) |
-
-## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
-
-An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
-architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
-esoteric cables or uncontrolled sample-rate conversions).
-
 ## Accessing the Board
 
 Connect power via your pure analog power source and log into the stable onboard eMMC environment via SSH:
@@ -34,6 +38,70 @@ ssh root@beaglebone.local
 ```
 
 *(Direct root access is enabled; default password is `temppwd` if not changed).*
+
+## Configure Onboard Linux
+
+### Bypassing the Mixer: Direct DMA Path
+
+The critical configuration step is routing the audio stream directly to the hardware device, bypassing ALSA's
+software mixer (dmix) entirely. The `hw:1,0` designator locks the stream to the raw kernel DMA buffer — no
+resampling, no mixing, no volume scaling in software. The kernel hands PCM data straight to the I2S bus via DMA
+transfer, and the DAC receives exactly what came off the network.
+
+This is enforced in the GMediaRender launch flags:
+
+```
+-o gst --gstout-audiosink=alsasink --gstout-audiodevice=hw:1,0
+```
+
+Any `plughw:` or `default:` designation silently re-enables dmix and destroys bit-perfect integrity.
+
+### Low-Level Hardware & ALSA Diagnostics
+
+Verify that the bit-perfect stream reaches the physical layer without resampling or software mixing.
+
+* **List active audio hardware interfaces and subdevices:**
+
+```bash
+aplay -l
+
+```
+
+* **Inspect stream routing directly from the kernel ring buffer:**
+
+```bash
+dmesg | grep -i alsa
+
+```
+
+### Industrial Storage Health (eMMC)
+
+Monitor the physical integrity of the boot medium acquired from local sources.
+
+* **Check available disk space and partition table mapping:**
+
+```bash
+df -h
+
+```
+
+    Filesystem      Size  Used Avail Use% Mounted on
+    udev            215M     0  215M   0% /dev
+    tmpfs            49M  5.3M   44M  11% /run
+    /dev/mmcblk1p1  3.5G  3.1G  230M  94% /
+    tmpfs           242M     0  242M   0% /dev/shm
+    tmpfs           5.0M  4.0K  5.0M   1% /run/lock
+    tmpfs           242M     0  242M   0% /sys/fs/cgroup
+    tmpfs            49M     0   49M   0% /run/user/0
+
+* **Inspect free RAM and system load average (ensuring < 0.1 during playback):**
+
+```bash
+htop
+
+```
+
+*(Install via `sudo apt install htop` if missing).*
 
 ## Installation & Deployment
 
@@ -63,7 +131,7 @@ sudo ./valera_deploy.py
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as an override
 drop-in), and waiting for your media stream.
 
-## foobar2000 Configuration
+## Configure foobar2000 on Windows 11
 
 1. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **Topping Endpoint**.
 2. Set the output bit depth strictly to **32-bit** to ensure clean DSF container passing.
@@ -78,6 +146,68 @@ drop-in), and waiting for your media stream.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
   for 1-2 seconds. The system will safely unmount filesystems from eMMC and shut down.
 
-|            Valera             |                  htop                   | Mercyful Fate in here! an absolute bit-perfect, bare-metal pass-through! |
-|:-----------------------------:|:---------------------------------------:|:------------------------------------------------------------------------:|
-| ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) |   ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg)    |
+## Terminal Support & Diagnostics
+
+### Process & Daemon Management
+
+To tame the systemd hound and manage the rendering endpoint directly:
+
+* **Verify live process memory and active command-line arguments:**
+
+```bash
+ps aux | grep gmediarender
+
+```
+
+* **Real-time system journal tracking (stderr/stdout output):**
+
+```bash
+journalctl -u gmediarender.service -f --no-tail
+
+```
+
+* **Check live daemon status:**
+
+```bash
+sudo systemctl status gmediarender
+
+```
+
+* **Force immediate restart (applying overrides):**
+
+```bash
+sudo systemctl restart gmediarender
+
+```
+
+* **Wipe fail-states and clear journal anomalies:**
+
+```bash
+sudo systemctl reset-failed gmediarender
+
+```
+
+* **Total daemon termination:**
+
+```bash
+sudo systemctl stop gmediarender
+
+```
+
+### Network & End-Point Visibility
+
+Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
+
+* **Check active network sockets and port binding (UPnP port 8200):**
+
+```bash
+sudo ss -tulpn | grep gmediarender
+
+```
+
+* **Ping the board locally to verify zero-latency connection:**
+
+```bash
+ping -c 4 beaglebone.local
+
+```
