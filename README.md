@@ -41,12 +41,56 @@ ssh root@beaglebone.local
 
 ## Configure Onboard Linux
 
+The board ships with a factory **Debian** image pre-installed on eMMC. Check the running version immediately after first
+login:
+
+```bash
+cat /etc/os-release
+
+```
+
+    PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
+    NAME="Debian GNU/Linux"
+    VERSION_ID="9"
+    VERSION="9 (stretch)"
+    ID=debian
+    HOME_URL="https://www.debian.org/"
+    SUPPORT_URL="https://www.debian.org/support"
+    BUG_REPORT_URL="https://bugs.debian.org/"
+    root@beaglebone:~# 
+
+The factory image includes a built-in Node.js stack and a local documentation server — accessible in the LAN at
+[http://beaglebone.local](http://beaglebone.local) while the board is powered. Useful for pinout references and
+peripheral programming docs without going online.
+
 ### Bypassing the Mixer: Direct DMA Path
 
 The critical configuration step is routing the audio stream directly to the hardware device, bypassing ALSA's
 software mixer (dmix) entirely. The `hw:1,0` designator locks the stream to the raw kernel DMA buffer — no
 resampling, no mixing, no volume scaling in software. The kernel hands PCM data straight to the I2S bus via DMA
 transfer, and the DAC receives exactly what came off the network.
+
+```
+  [ Windows 11 / foobar2000 ]
+  [ PCM 32-bit / DSD        ]
+          |
+          |  UPnP / DLNA (LAN)
+  - - - - | - - - - - - - - - - - - BeagleBone
+          v
+  [ GMediaRender            ]  systemd daemon (autostart)
+          |
+          |  raw PCM frames
+          v
+  [ GStreamer  alsasink      ]  hw:1,0  --  dmix BYPASSED
+          |
+          |  kernel ALSA (hw interface)
+          v
+  [ DMA transfer (AM335x)   ]  <-- CPU IS OUT OF THE LOOP
+          |
+          |  I2S / McASP bus
+          v
+  [ DAC (Topping)           ]
+```
 
 This is enforced in the GMediaRender launch flags:
 
