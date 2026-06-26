@@ -111,12 +111,24 @@ aplay -l
 
 ```
 
+    **** List of PLAYBACK Hardware Devices ****
+    card 1: MX3s [MX3s], device 0: USB Audio [USB Audio]
+      Subdevices: 1/1
+      Subdevice #0: subdevice #0
+
 * **Inspect stream routing directly from the kernel ring buffer:**
 
 ```bash
 dmesg | grep -i alsa
 
 ```
+
+    [    1.967043] ALSA device list:
+
+> **Architectural Note:** An empty initialization list at early boot (`~1.96s`) is the correct, expected state. Onboard
+> audio interfaces are explicitly stripped via device tree overlays to maintain a pristine, jitter-free environment.
+> High-fidelity rendering is offloaded entirely to the external asynchronous USB DAC subsystem, which maps dynamically
+> post-boot. Always use `aplay -l` to verify live endpoints.
 
 ### Industrial Storage Health (eMMC)
 
