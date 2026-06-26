@@ -10,7 +10,7 @@ esoteric cables or uncontrolled sample-rate conversions).
 |:-------------------------------------------------:|:---------------------------------------------------------:|:-------------------------------------------------------------:|
 | ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) |
 
-|            Valera             |                  htop                   | Mercyful Fate in here! an absolute bit-perfect, bare-metal pass-through! |
+|          Valera-MIPS          |                  htop                   | Mercyful Fate in here! an absolute bit-perfect, bare-metal pass-through! |
 |:-----------------------------:|:---------------------------------------:|:------------------------------------------------------------------------:|
 | ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) |   ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg)    |
 
@@ -216,6 +216,20 @@ journalctl -u gmediarender.service -f --no-tail
 sudo systemctl status gmediarender
 
 ```
+
+    ● gmediarender.service - GMediaRender Daemon
+       Loaded: loaded (/lib/systemd/system/gmediarender.service; enabled; vendor preset: enabled)
+      Drop-In: /etc/systemd/system/gmediarender.service.d
+               └─override.conf
+       Active: active (running) since Thu 2026-06-25 22:45:59 UTC; 4h 27min ago
+     Main PID: 1242 (gmediarender)
+       CGroup: /system.slice/gmediarender.service
+               └─1242 /usr/bin/gmediarender -f Topping Endpoint -o gst --gstout-audiosink=alsasink
+    
+    Jun 25 22:45:59 beaglebone systemd[1]: Started GMediaRender Daemon.
+    Jun 25 22:46:00 beaglebone gmediarender[1242]: gmediarender 0.0.7-git started [ gmediarender 0.0.7-git (libupnp-1.6.19+git20160116; glib-2.49.6; gstreamer-1.8.3) ].
+    Jun 25 22:46:00 beaglebone gmediarender[1242]: Logging switched off. Enable with --logfile=<filename> (e.g. --logfile=/dev/stdout for console)
+    Jun 25 22:46:11 beaglebone gmediarender[1242]: Ready for rendering.
 
 * **Force immediate restart (applying overrides):**
 
