@@ -6,26 +6,25 @@ import subprocess
 # 1. Privileges check (Root required to configure system files and daemons)
 if os.geteuid() != 0:
     print("❌ Error: Script must be run with root privileges!")
-    print("👉 Use: sudo python3 deploy_valera.py")
+    print("👉 Use: sudo python3 valera_deploy.py")
     sys.exit(1)
 
 print("🚀 Launching Canonical Deployment: Valera Mladshoy (Sarmat Edition)...")
-print("📦 Target: BeagleBone Black + Topping DAC Bit-Perfect Streamer\n")
+print("📦 Target: BeagleBone Green + Topping DAC Bit-Perfect Streamer\n")
 
 # 2. Complete liquidation of the potential competitor (MPD mixer)
 print("🧹 Step 1: Disabling and masking MPD service...")
 subprocess.run(["systemctl", "stop", "mpd"], stderr=subprocess.DEVNULL)
 subprocess.run(["systemctl", "disable", "mpd"], stderr=subprocess.DEVNULL)
 
-# CRITICAL CORRECTNESS NOTE: We use 'mask' instead of just 'disable'.
+# 'mask' links the service to /dev/null, making it physically unlaunchable by the system.
 # 'disable' only removes symlinks from autostart, but any external trigger
 # (like a Node.js script or UPnP network event) can wake MPD up again.
-# 'mask' links the service to /dev/null, making it physically unlaunchable by the system.
 subprocess.run(["systemctl", "mask", "mpd"], stderr=subprocess.DEVNULL)
-print("✅ Competent MPD successfully buried in /dev/null.")
+print("✅ MPD successfully buried in /dev/null.")
 
 # 3. Global ALSA configuration
-print("\n🎛️ Step 2: Routing ALSA system default to hardware device (hw:1,0)...")
+print("\n🎛️  Step 2: Routing ALSA system default to hardware device (hw:1,0)...")
 asound_content = """pcm.!default {
     type hw
     card 1
@@ -39,51 +38,45 @@ ctl.!default {
 """
 with open("/etc/asound.conf", "w") as f:
     f.write(asound_content)
-print("✅ ALSA sound parameters fixed in /etc/asound.conf.")
+print("✅ ALSA routing fixed in /etc/asound.conf.")
 
-# 4. Cleanup old messy workarounds
-print("\n🔥 Step 3: Cleaning up legacy AI-generated systemd overrides...")
+# 4. Cleanup old overrides
+print("\n🔥 Step 3: Cleaning up legacy systemd overrides...")
 old_override_dir = "/etc/systemd/system/gmediarender.service.d"
 if os.path.exists(old_override_dir):
     subprocess.run(["rm", "-rf", old_override_dir])
-    print("✅ Legacy dirty overrides purged from the disk.")
+    print("✅ Legacy overrides purged.")
 else:
-    print("✅ No hidden overrides found, system is clean.")
+    print("✅ No legacy overrides found.")
 
-# 5. Writing the official configuration file
-print("\n📝 Step 4: Writing official configuration to /etc/default/gmediarender...")
+# 5. Writing canonical systemd unit
+print("\n📝 Step 4: Writing canonical systemd unit to /lib/systemd/system/gmediarender.service...")
 
-# CRITICAL QUOTING AND CORRECTNESS RULES:
-# 1. NO SYSTEMD OVERRIDES: We do NOT inject custom ExecStart into systemd units.
-#    Instead, we use the official configuration file designated by the package maintainers.
-# 2. QUOTE ACCURACY: Notice the DAEMON_ARGS formatting below.
-#    - Outer quotes MUST be double quotes: "..."
-#    - Inner argument values (like the endpoint name) MUST be wrapped in single quotes: '...'
-#    - Mixing this up breaks the SysV/systemd environment parser and crashes the daemon.
-config_content = """# /etc/default/gmediarender
-# Canonical configuration file for gmediarender
+unit_content = """[Unit]
+Description=GMediaRender UPnP Renderer
+After=network.target alsa-utils.service
 
-# Allow the init script to start the daemon
-ENABLED=1
+[Service]
+Type=simple
+ExecStart=/usr/bin/gmediarender -f "BeagleBone Topping" -o gst --gstout-audiosink=alsasink
+Restart=always
+RestartSec=5
+User=root
+StandardOutput=journal
+StandardError=journal
 
-# Run as root for direct hardware access and proper realtime priorities
-USER=root
-
-# EXPLICIT ARGUMENTS ENGINE:
-# -f 'Beaglebone Topping' -> The precise friendly name seen by foobar2000 / BubbleUPnP
-# -d                      -> Run as a background daemon process
-# --gst-audio-sink=...     -> Canonical GStreamer syntax for direct ALSA rendering
-DAEMON_ARGS="-f 'Beaglebone Topping' -d --gst-audio-sink=alsasink"
+[Install]
+WantedBy=multi-user.target
 """
 
-with open("/etc/default/gmediarender", "w") as f:
-    f.write(config_content)
-print("✅ Canonical environment config successfully updated.")
+with open("/lib/systemd/system/gmediarender.service", "w") as f:
+    f.write(unit_content)
+print("✅ Canonical systemd unit written.")
 
 # 6. Reloading init system and igniting Valera
-print("\n🔄 Step 5: Reloading systemd manager and restarting streamer daemon...")
+print("\n🔄 Step 5: Reloading systemd and restarting streamer daemon...")
 subprocess.run(["systemctl", "daemon-reload"])
-subprocess.run(["systemctl", "enable", "gmediarender"], stderr=subprocess.DEVNULL)
+subprocess.run(["systemctl", "enable", "gmediarender.service"], stderr=subprocess.DEVNULL)
 subprocess.run(["systemctl", "restart", "gmediarender"])
 
 # 7. Final automated health check
@@ -92,7 +85,7 @@ result = subprocess.run(["systemctl", "is-active", "gmediarender"], capture_outp
 
 if result.stdout.strip() == "active":
     print("\n🎉 GOAL!!! Valera Mladshoy successfully deployed to production!")
-    print("📡 Device 'Beaglebone Topping' is up, clean, and locked on target.")
+    print("📡 Device 'BeagleBone Topping' is up, clean, and locked on target.")
     print("🎵 Direct your foobar2000 stream here and enjoy bit-perfect heavy metal!")
 else:
     print("\n🤔 Warning: Configuration applied, but daemon failed to ignite.")
