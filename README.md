@@ -193,29 +193,6 @@ drop-in), and waiting for your media stream.
 2. Set the output bit depth strictly to **32-bit** to ensure clean DSF container passing.
 3. Fire up your heavy metal stream and enjoy pure hardware rendering.
 
-## Why USB on BeagleBone Green Is Not an Audiophile Path
-
-BeagleBone Green deliberately sacrifices HDMI and the onboard analog audio output compared to BeagleBone Black.
-This was a conscious design decision to eliminate switching noise sources from the power and ground planes —
-cleaning up the I2S/McASP signal path for direct DAC interfacing.
-
-However, the USB controller was not part of this cleanup. BeagleBone carries the **musb-hdrc** — a TI OTG
-(On-The-Go) controller, a dual-role compromise designed for industrial applications: barcode scanners, keyboards,
-USB sticks, irrigation controllers. One silicon block instead of two, lower cost, smaller die area. Audio was
-never in the requirements.
-
-**The async USB argument does not save it.** Yes, UAC2 async mode means the DAC controls the clock via feedback
-endpoint — the host adapts its packet rate to the DAC's demand. The clock source is the DAC, not the PC bus.
-This is correct. But async mode only solves the *timing* problem. It does not fix the *physical layer* — the
-electrical quality of the USB signal coming out of musb-hdrc. A noisy, jittery signal on the wire means the
-DAC's receiver sees degraded transitions, and the async feedback loop cannot compensate for that.
-
-**BeagleBone Green was designed to be audiophile — through I2S.** The McASP (Multichannel Audio Serial Port)
-with hardware DMA is the clean path. CPU out of the loop, direct bus transfer, no USB stack, no packet
-scheduling, no OTG compromises. That is the architecture the board was built for.
-
-USB DAC output on BeagleBone Green is a workaround. I2S is the destination.
-
 ## Hardware Maintenance Note
 
 * **24/7 eMMC Operation:** This is an industrial embedded setup using solid internal flash. Power consumption is < 2W in
