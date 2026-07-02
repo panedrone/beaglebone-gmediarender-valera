@@ -2,8 +2,8 @@
 
 ## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
 
-An uncompromising audiophile streamer based on BeagleBone, deployed following industrial hardware standards. The
-architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
+An uncompromising audiophile streamer based on BeagleBone Green. 
+The architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
 esoteric cables or uncontrolled sample-rate conversions).
 
 |                 1. Embedded Board                 |                       2. Media App                        |                          3. Endpoint                          |
@@ -92,13 +92,16 @@ transfer, and the DAC receives exactly what came off the network.
   [ DAC (Topping)           ]
 ```
 
-This is enforced in the GMediaRender launch flags:
+This is enforced in two places working together. The GMediaRender launch flag:
 
 ```
--o gst --gstout-audiosink=alsasink --gstout-audiodevice=hw:1,0
+-o gst --gstout-audiosink=alsasink
 ```
 
-Any `plughw:` or `default:` designation silently re-enables dmix and destroys bit-perfect integrity.
+And the global ALSA routing in `/etc/asound.conf` which maps `pcm.!default` to `hw:1,0`. The alsasink picks
+up the default device from there — no device hardcoded in the flags, no dmix in the path.
+
+Any `plughw:` or `default:` in `/etc/asound.conf` silently re-enables dmix and destroys bit-perfect integrity.
 
 ### Low-Level Hardware & ALSA Diagnostics
 
