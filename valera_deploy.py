@@ -54,7 +54,8 @@ print("\n📝 Step 4: Writing canonical systemd unit to /lib/systemd/system/gmed
 
 unit_content = """[Unit]
 Description=GMediaRender UPnP Renderer
-After=network.target alsa-utils.service
+After=network-online.target alsa-utils.service
+Wants=network-online.target
 
 [Service]
 Type=simple
