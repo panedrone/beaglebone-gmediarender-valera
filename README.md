@@ -19,14 +19,15 @@ esoteric cables or uncontrolled sample-rate conversions).
 1. **Base Image & Internal Memory Storage:** Built on a standard, field-tested **Debian** distribution deployed directly
    onto the industrial onboard eMMC flash memory, completely eliminating fragile MicroSD-card dependencies and
    contact-wear jitter.
-2. **Hardware Binding (Direct Bus/I2S):** The UPnP/DLNA stream is delivered directly via GStreamer pass-through (
-   `-o gst --gstout-audiosink=alsasink`) hardcoded to routing (`hw:1,0`), completely bypassing unnecessary software
-   resamplers.
+2. **Hardware Binding (Direct to `hw:1,0`):** The UPnP/DLNA stream is delivered via GStreamer
+   (`-o gst --gstout-audiosink=alsasink`) onto the raw hardware device, routed there by `/etc/asound.conf`,
+   with ALSA's `dmix` software mixer out of the path entirely.
 3. **Lifting Digital Constraints:** The endpoint initializes strictly at 100% volume (`--initial-volume=100`) at the
    daemon level to maintain an absolute bit-perfect stream over the network.
-4. **Uncompromising Power Supply:** Ditching noisy switched-mode power supplies and dirty mains in favor of a pure
-   analog source (powerbank). This revealed true micro-dynamics, eliminated jitter, and achieved crystal-clear sound
-   staging that outperforms commercial Hi-End streamers.
+4. **Floating Power Supply:** Running the board from a powerbank instead of a mains adapter. The effect that
+   actually holds up is not "micro-dynamics" - it is that the source has no connection to mains earth, so no
+   ground loop can form through the USB cable. That is the one genuine advantage usually claimed for
+   transformer-isolated S/PDIF, obtained here for the price of a powerbank.
 
 ## Accessing the Board
 
@@ -63,34 +64,47 @@ The factory image includes a built-in Node.js stack and a local documentation se
 [http://beaglebone.local](http://beaglebone.local) while the board is powered. Useful for pinout references and
 peripheral programming docs without going online.
 
-### Bypassing the Mixer: Direct DMA Path
+### Bypassing the Mixer: The Actual Signal Path
 
 The critical configuration step is routing the audio stream directly to the hardware device, bypassing ALSA's
-software mixer (dmix) entirely. The `hw:1,0` designator locks the stream to the raw kernel DMA buffer — no
-resampling, no mixing, no volume scaling in software. The kernel hands PCM data straight to the I2S bus via DMA
-transfer, and the DAC receives exactly what came off the network.
+software mixer (`dmix`) entirely. The `hw:1,0` designator locks the stream to the raw kernel DMA buffer - no
+mixing, no volume scaling in software.
+
+Note what `hw:1,0` is *not* here. No I2S DAC is attached to this board. The AM335x McASP peripheral - the SoC's
+native I2S engine, brought out on the P9 header - is unused, and onboard audio is stripped via device tree
+overlays. The endpoint is an external asynchronous USB DAC, so the DMA transfer feeds the FIFO of the MUSB
+USB 2.0 host controller. I2S does exist in this chain, but inside the DAC, downstream of the USB bridge.
 
 ```
   [ Windows 11 / foobar2000 ]
-  [ PCM 32-bit / DSD        ]
+  [ PCM 24-bit / 44.1-192k  ]
           |
           |  UPnP / DLNA (LAN)
-  - - - - | - - - - - - - - - - - - BeagleBone
+  - - - - | - - - - - - - - - - - - BeagleBone Green
           v
   [ GMediaRender            ]  systemd daemon (autostart)
           |
-          |  raw PCM frames
+          |  GStreamer playbin -> alsasink
           v
-  [ GStreamer  alsasink      ]  hw:1,0  --  dmix BYPASSED
+  [ ALSA  hw:1,0            ]  dmix BYPASSED
           |
-          |  kernel ALSA (hw interface)
+          |  snd-usb-audio: PCM -> isochronous URBs
           v
-  [ DMA transfer (AM335x)   ]  <-- CPU IS OUT OF THE LOOP
+  [ MUSB + DMA (AM335x)     ]  high speed, 125 us microframes
           |
-          |  I2S / McASP bus
+          |  USB cable
           v
-  [ DAC (Topping)           ]
+  [ Savitech 262a:196f      ]  USB audio bridge, ASYNC endpoint
+          |
+          |  I2S  (internal to the DAC)
+          v
+  [ DAC (Topping MX3s)      ]
 ```
+
+**The clock lives at the endpoint.** The playback endpoint enumerates as `ASYNC`: the DAC's own oscillator is
+master, and the host adapts to its feedback. This is precisely what an S/PDIF link cannot offer - there the
+receiver has to recover the clock from the wire with a PLL, and the source's oscillator, however expensive, is
+discarded at the far end.
 
 This is enforced in two places working together. The GMediaRender launch flag:
 
@@ -132,6 +146,75 @@ dmesg | grep -i alsa
 > audio interfaces are explicitly stripped via device tree overlays to maintain a pristine, jitter-free environment.
 > High-fidelity rendering is offloaded entirely to the external asynchronous USB DAC subsystem, which maps dynamically
 > post-boot. Always use `aplay -l` to verify live endpoints.
+
+* **Identify the USB bridge inside the DAC:**
+
+```bash
+lsusb
+
+```
+
+    Bus 001 Device 002: ID 262a:196f
+    Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
+
+Vendor `262a` is SAVITECH - the USB-to-I2S bridge inside the MX3s. (`152a` would mean Thesycon/XMOS, `0d8c`
+C-Media.) Which bridge it is matters far less than how its endpoint is clocked, which is the next check.
+
+* **Verify the endpoint is asynchronous and list what the DAC actually accepts:**
+
+```bash
+cat /proc/asound/card1/stream0
+
+```
+
+    TOPPING MX3s at usb-musb-hdrc.1-1, high speed : USB Audio
+
+    Playback:
+      Status: Running
+        Interface = 2
+        Altset = 2
+        Momentary freq = 44100 Hz (0x5.8333)
+        Feedback Format = 16.16
+      Interface 2
+        Altset 1
+        Format: S16_LE
+        Channels: 2
+        Endpoint: 3 OUT (ASYNC)
+        Rates: 44100, 48000, 88200, 96000, 176400, 192000
+        Data packet interval: 125 us
+      Interface 2
+        Altset 2
+        Format: S24_3LE
+        Channels: 2
+        Endpoint: 3 OUT (ASYNC)
+        Rates: 44100, 48000, 88200, 96000, 176400, 192000
+        Data packet interval: 125 us
+
+> **Hardware ceiling - read this before tuning anything upstream.** The DAC exposes exactly two formats,
+> `S16_LE` and `S24_3LE`, and tops out at 192 kHz. There is no 32-bit altsetting and no DSD altsetting on this
+> device. Feeding it 32-bit or DSD unlocks nothing; it only guarantees a conversion somewhere earlier in the
+> chain. Note also `Feedback Format` - that is the DAC telling the host how fast to send, which is asynchronous
+> mode doing its job.
+
+* **Prove nothing is resampling - run this while a track is playing:**
+
+```bash
+cat /proc/asound/card1/pcm0p/sub0/hw_params
+
+```
+
+    access: RW_INTERLEAVED
+    format: S24_3LE
+    subformat: STD
+    channels: 2
+    rate: 44100 (44100/1)
+    period_size: 441
+    buffer_size: 8820
+
+The `rate` must match the source file. A 96 kHz file reporting `rate: 44100` means GStreamer inserted a
+resampler, and no setting in `/etc/asound.conf` can fix that - `playbin` builds its own `audioconvert` and
+`audioresample` a layer above ALSA. This file is the only honest proof of a bit-perfect path; the launch flags
+are not.
 
 ### Industrial Storage Health (eMMC)
 
@@ -187,14 +270,19 @@ sudo ./valera_deploy.py
 
 ```
 
-When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as an override
-drop-in), and waiting for your media stream.
+When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
+unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
 
 ## Configure foobar2000 on Windows 11
 
-1. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **Topping Endpoint**.
-2. Set the output bit depth strictly to **32-bit** to ensure clean DSF container passing.
-3. Fire up your heavy metal stream and enjoy pure hardware rendering.
+1. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **BeagleBone Topping**.
+2. Set the output bit depth to **24-bit** - not 32. The MX3s offers only `S16_LE` and `S24_3LE` over USB, so a
+   32-bit stream cannot reach it intact and merely forces a downconversion inside the pipeline.
+3. Leave the DSP chain empty: no resampler, no volume normalisation, no ReplayGain applied at output.
+4. Fire up your heavy metal stream and enjoy pure hardware rendering.
+
+> **On DSD:** it does not work in this build, and cannot. GStreamer 1.8.3 has no DSD decoder (`dsddec` arrived
+> in 1.24), and the DAC has no DSD altsetting to receive it anyway. Feed it PCM.
 
 ## Hardware Maintenance Note
 
@@ -232,19 +320,20 @@ sudo systemctl status gmediarender
 
 ```
 
-    ● gmediarender.service - GMediaRender Daemon
+    ● gmediarender.service - GMediaRender UPnP Renderer
        Loaded: loaded (/lib/systemd/system/gmediarender.service; enabled; vendor preset: enabled)
-      Drop-In: /etc/systemd/system/gmediarender.service.d
-               └─override.conf
        Active: active (running) since Thu 2026-06-25 22:45:59 UTC; 4h 27min ago
-     Main PID: 1242 (gmediarender)
+     Main PID: 1216 (gmediarender)
        CGroup: /system.slice/gmediarender.service
-               └─1242 /usr/bin/gmediarender -f Topping Endpoint -o gst --gstout-audiosink=alsasink
+               └─1216 /usr/bin/gmediarender -f BeagleBone Topping -o gst --gstout-audiosink=alsasink
     
-    Jun 25 22:45:59 beaglebone systemd[1]: Started GMediaRender Daemon.
-    Jun 25 22:46:00 beaglebone gmediarender[1242]: gmediarender 0.0.7-git started [ gmediarender 0.0.7-git (libupnp-1.6.19+git20160116; glib-2.49.6; gstreamer-1.8.3) ].
-    Jun 25 22:46:00 beaglebone gmediarender[1242]: Logging switched off. Enable with --logfile=<filename> (e.g. --logfile=/dev/stdout for console)
-    Jun 25 22:46:11 beaglebone gmediarender[1242]: Ready for rendering.
+    Jun 25 22:45:59 beaglebone systemd[1]: Started GMediaRender UPnP Renderer.
+    Jun 25 22:46:00 beaglebone gmediarender[1216]: gmediarender 0.0.7-git started [ gmediarender 0.0.7-git (libupnp-1.6.19+git20160116; glib-2.49.6; gstreamer-1.8.3) ].
+    Jun 25 22:46:00 beaglebone gmediarender[1216]: Logging switched off. Enable with --logfile=<filename> (e.g. --logfile=/dev/stdout for console)
+    Jun 25 22:46:11 beaglebone gmediarender[1216]: Ready for rendering.
+
+There is no `Drop-In:` line: `valera_deploy.py` deletes `/etc/systemd/system/gmediarender.service.d` and writes
+the unit itself, so the override mechanism is deliberately out of the picture.
 
 * **Force immediate restart (applying overrides):**
 
