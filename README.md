@@ -24,14 +24,13 @@ esoteric cables or uncontrolled sample-rate conversions).
    with ALSA's `dmix` software mixer out of the path entirely.
 3. **Lifting Digital Constraints:** The endpoint initializes strictly at 100% volume (`--initial-volume=100`) at the
    daemon level to maintain an absolute bit-perfect stream over the network.
-4. **Floating Power Supply:** Running the board from a powerbank instead of a mains adapter. The effect that
-   actually holds up is not "micro-dynamics" - it is that the source has no connection to mains earth, so no
-   ground loop can form through the USB cable. That is the one genuine advantage usually claimed for
-   transformer-isolated S/PDIF, obtained here for the price of a powerbank.
+4. **Power Supply:** Powered from a PC USB port, I could hear the PC. Anything that gets the board off that rail
+   fixes it - a powerbank, a USB socket on a mains filter, even a phone charger. A linear supply (~$50) is the
+   ideal, but not a prerequisite.
 
 ## Accessing the Board
 
-Connect power via your pure analog power source and log into the stable onboard eMMC environment via SSH:
+Connect power and log into the stable onboard eMMC environment via SSH:
 
 ```bash
 ssh root@beaglebone.local
@@ -288,8 +287,8 @@ unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for 
 
 * **24/7 eMMC Operation:** This is an industrial embedded setup using solid internal flash. Power consumption is < 2W in
   peak. It is designed to run continuously without reboots.
-* **Battery DC Power Option:** For an ultra-clean, noise-free DC source, run the hardware from a powerbank. Ensure the
-  powerbank features a "low-current/always-on" mode to prevent automated sleep intervals during track changes.
+* **If Running Off a Powerbank:** Pick one with a "low-current/always-on" mode, otherwise it goes to sleep on the
+  board's low draw and cuts power during track changes.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
   for 1-2 seconds. The system will safely unmount filesystems from eMMC and shut down.
 
