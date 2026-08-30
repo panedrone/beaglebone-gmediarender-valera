@@ -71,33 +71,65 @@ mixing, no volume scaling in software.
 
 Note what `hw:1,0` is *not* here. No I2S DAC is attached to this board. The AM335x McASP peripheral - the SoC's
 native I2S engine, brought out on the P9 header - is unused, and onboard audio is stripped via device tree
-overlays. The endpoint is an external asynchronous USB DAC, so the DMA transfer feeds the FIFO of the MUSB
-USB 2.0 host controller. I2S does exist in this chain, but inside the DAC, downstream of the USB bridge.
+overlays. The endpoint is an external asynchronous USB device, so the DMA transfer feeds the FIFO of the MUSB
+USB 2.0 host controller. I2S does exist in this chain, but inside the MX3s, downstream of the USB bridge.
+
+The MX3s itself is an integrated amplifier, not a DAC box: the Savitech bridge hands I2S to an AKM AK4377,
+and its analog output drives an Infineon MA12070 class D power stage. Everything past the USB cable is one
+sealed unit - the diagram below shows it only to place the I2S link where it actually is.
 
 ```
-  [ Windows 11 / foobar2000 ]
-  [ PCM 24-bit / 44.1-192k  ]
-          |
-          |  UPnP / DLNA (LAN)
-  - - - - | - - - - - - - - - - - - BeagleBone Green
-          v
-  [ GMediaRender            ]  systemd daemon (autostart)
-          |
-          |  GStreamer playbin -> alsasink
-          v
-  [ ALSA  hw:1,0            ]  dmix BYPASSED
-          |
-          |  snd-usb-audio: PCM -> isochronous URBs
-          v
-  [ MUSB + DMA (AM335x)     ]  high speed, 125 us microframes
-          |
-          |  USB cable
-          v
-  [ Savitech 262a:196f      ]  USB audio bridge, ASYNC endpoint
-          |
-          |  I2S  (internal to the DAC)
-          v
-  [ DAC (Topping MX3s)      ]
++-- Windows 11 / foobar2000 -----------------------------+
+|  PCM 24-bit / 44.1-192 kHz                             |
++--------------------------------------------------------+
+                            |  UPnP / DLNA over the LAN
+                            v
++-- BeagleBone Green ------------------------------------+
+|                                                        |
+|      +------------------------------------------+      |
+|      |  GMediaRender                            |      |
+|      |  systemd daemon, autostart               |      |
+|      +------------------------------------------+      |
+|                           |  playbin -> alsasink       |
+|                           v                            |
+|      +------------------------------------------+      |
+|      |  ALSA  hw:1,0                            |      |
+|      |  dmix BYPASSED                           |      |
+|      +------------------------------------------+      |
+|                           |  snd-usb-audio:            |
+|                           |  PCM -> isoch. URBs        |
+|                           v                            |
+|      +------------------------------------------+      |
+|      |  MUSB + DMA (AM335x)                     |      |
+|      |  high speed, 125 us microframes          |      |
+|      +------------------------------------------+      |
+|                                                        |
++--------------------------------------------------------+
+                            |  USB cable
+                            v
++-- Topping MX3s (integrated amplifier) -----------------+
+|                                                        |
+|      +------------------------------------------+      |
+|      |  Savitech 262a:196f                      |      |
+|      |  USB audio bridge, ASYNC endpoint        |      |
+|      +------------------------------------------+      |
+|                           |  I2S                       |
+|                           v                            |
+|      +------------------------------------------+      |
+|      |  AKM AK4377                              |      |
+|      |  the DAC chip itself                     |      |
+|      +------------------------------------------+      |
+|                           |  analog                    |
+|                           v                            |
+|      +------------------------------------------+      |
+|      |  Infineon MA12070                        |      |
+|      |  class D power stage                     |      |
+|      +------------------------------------------+      |
+|                                                        |
++--------------------------------------------------------+
+                            |
+                            v
+                        speakers
 ```
 
 **The clock lives at the endpoint.** The playback endpoint enumerates as `ASYNC`: the DAC's own oscillator is
@@ -146,7 +178,7 @@ dmesg | grep -i alsa
 > High-fidelity rendering is offloaded entirely to the external asynchronous USB DAC subsystem, which maps dynamically
 > post-boot. Always use `aplay -l` to verify live endpoints.
 
-* **Identify the USB bridge inside the DAC:**
+* **Identify the USB bridge inside the MX3s:**
 
 ```bash
 lsusb
