@@ -80,22 +80,22 @@ sealed unit - the diagram below shows it only to place the I2S link where it act
 
 ```mermaid
 flowchart LR
-    SRC["<b>Windows 11 / foobar2000</b><br/>PCM 24-bit / 44.1-192 kHz"]
+    SRC["<b>Windows 11</b><br/><b>foobar2000</b><br/>PCM 24-bit<br/>44.1-192 kHz"]
 
     subgraph BBG["BeagleBone Green"]
         direction TB
-        GMR["<b>GMediaRender</b><br/>systemd daemon, autostart"]
+        GMR["<b>GMediaRender</b><br/>systemd daemon,<br/>autostart"]
         ALSA["<b>ALSA hw:1,0</b><br/>dmix BYPASSED"]
-        MUSB["<b>MUSB + DMA (AM335x)</b><br/>high speed, 125 us microframes"]
+        MUSB["<b>MUSB + DMA</b><br/><b>(AM335x)</b><br/>high speed,<br/>125 us microframes"]
         GMR -- "playbin &rarr; alsasink" --> ALSA
-        ALSA -- "snd-usb-audio: PCM &rarr; isoch. URBs" --> MUSB
+        ALSA -- "snd-usb-audio:<br/>PCM &rarr; isoch. URBs" --> MUSB
     end
 
     subgraph MX3S["Topping MX3s (integrated amplifier)"]
         direction TB
-        SAV["<b>Savitech 262a:196f</b><br/>USB audio bridge, ASYNC endpoint"]
-        AKM["<b>AKM AK4377</b><br/>the DAC chip itself"]
-        MA["<b>Infineon MA12070</b><br/>class D power stage"]
+        SAV["<b>Savitech</b><br/><b>262a:196f</b><br/>USB audio bridge,<br/>ASYNC endpoint"]
+        AKM["<b>AKM AK4377</b><br/>the DAC<br/>chip itself"]
+        MA["<b>Infineon</b><br/><b>MA12070</b><br/>class D<br/>power stage"]
         SAV -- "I2S" --> AKM
         AKM -- "analog" --> MA
     end
