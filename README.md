@@ -79,7 +79,7 @@ and its analog output drives an Infineon MA12070 class D power stage. Everything
 sealed unit - the diagram below shows it only to place the I2S link where it actually is.
 
 ```mermaid
-flowchart TD
+flowchart LR
     SRC["<b>Windows 11 / foobar2000</b><br/>PCM 24-bit / 44.1-192 kHz"]
 
     subgraph BBG["BeagleBone Green"]
@@ -88,7 +88,7 @@ flowchart TD
         ALSA["<b>ALSA hw:1,0</b><br/>dmix BYPASSED"]
         MUSB["<b>MUSB + DMA (AM335x)</b><br/>high speed, 125 us microframes"]
         GMR -- "playbin &rarr; alsasink" --> ALSA
-        ALSA -- "snd-usb-audio:<br/>PCM &rarr; isoch. URBs" --> MUSB
+        ALSA -- "snd-usb-audio: PCM &rarr; isoch. URBs" --> MUSB
     end
 
     subgraph MX3S["Topping MX3s (integrated amplifier)"]
@@ -102,9 +102,9 @@ flowchart TD
 
     SPK(["speakers"])
 
-    SRC -- "UPnP / DLNA over the LAN" --> GMR
-    MUSB -- "USB cable" --> SAV
-    MA --> SPK
+    SRC -- "UPnP / DLNA<br/>over the LAN" --> BBG
+    BBG -- "USB cable" --> MX3S
+    MX3S --> SPK
 
     classDef host fill:#dbeafe,stroke:#1e3a8a,stroke-width:1px,color:#0b1220
     classDef soft fill:#dcfce7,stroke:#166534,stroke-width:1px,color:#0b1220
