@@ -78,58 +78,52 @@ The MX3s itself is an integrated amplifier, not a DAC box: the Savitech bridge h
 and its analog output drives an Infineon MA12070 class D power stage. Everything past the USB cable is one
 sealed unit - the diagram below shows it only to place the I2S link where it actually is.
 
-```
-+-- Windows 11 / foobar2000 -----------------------------+
-|  PCM 24-bit / 44.1-192 kHz                             |
-+--------------------------------------------------------+
-                            |  UPnP / DLNA over the LAN
-                            v
-+-- BeagleBone Green ------------------------------------+
-|                                                        |
-|      +------------------------------------------+      |
-|      |  GMediaRender                            |      |
-|      |  systemd daemon, autostart               |      |
-|      +------------------------------------------+      |
-|                           |  playbin -> alsasink       |
-|                           v                            |
-|      +------------------------------------------+      |
-|      |  ALSA  hw:1,0                            |      |
-|      |  dmix BYPASSED                           |      |
-|      +------------------------------------------+      |
-|                           |  snd-usb-audio:            |
-|                           |  PCM -> isoch. URBs        |
-|                           v                            |
-|      +------------------------------------------+      |
-|      |  MUSB + DMA (AM335x)                     |      |
-|      |  high speed, 125 us microframes          |      |
-|      +------------------------------------------+      |
-|                                                        |
-+--------------------------------------------------------+
-                            |  USB cable
-                            v
-+-- Topping MX3s (integrated amplifier) -----------------+
-|                                                        |
-|      +------------------------------------------+      |
-|      |  Savitech 262a:196f                      |      |
-|      |  USB audio bridge, ASYNC endpoint        |      |
-|      +------------------------------------------+      |
-|                           |  I2S                       |
-|                           v                            |
-|      +------------------------------------------+      |
-|      |  AKM AK4377                              |      |
-|      |  the DAC chip itself                     |      |
-|      +------------------------------------------+      |
-|                           |  analog                    |
-|                           v                            |
-|      +------------------------------------------+      |
-|      |  Infineon MA12070                        |      |
-|      |  class D power stage                     |      |
-|      +------------------------------------------+      |
-|                                                        |
-+--------------------------------------------------------+
-                            |
-                            v
-                        speakers
+```mermaid
+flowchart TD
+    SRC["<b>Windows 11 / foobar2000</b><br/>PCM 24-bit / 44.1-192 kHz"]
+
+    subgraph BBG["BeagleBone Green"]
+        direction TB
+        GMR["<b>GMediaRender</b><br/>systemd daemon, autostart"]
+        ALSA["<b>ALSA hw:1,0</b><br/>dmix BYPASSED"]
+        MUSB["<b>MUSB + DMA (AM335x)</b><br/>high speed, 125 us microframes"]
+        GMR -- "playbin &rarr; alsasink" --> ALSA
+        ALSA -- "snd-usb-audio:<br/>PCM &rarr; isoch. URBs" --> MUSB
+    end
+
+    subgraph MX3S["Topping MX3s (integrated amplifier)"]
+        direction TB
+        SAV["<b>Savitech 262a:196f</b><br/>USB audio bridge, ASYNC endpoint"]
+        AKM["<b>AKM AK4377</b><br/>the DAC chip itself"]
+        MA["<b>Infineon MA12070</b><br/>class D power stage"]
+        SAV -- "I2S" --> AKM
+        AKM -- "analog" --> MA
+    end
+
+    SPK(["speakers"])
+
+    SRC -- "UPnP / DLNA over the LAN" --> GMR
+    MUSB -- "USB cable" --> SAV
+    MA --> SPK
+
+    classDef host fill:#dbeafe,stroke:#1e3a8a,stroke-width:1px,color:#0b1220
+    classDef soft fill:#dcfce7,stroke:#166534,stroke-width:1px,color:#0b1220
+    classDef kern fill:#fef3c7,stroke:#92400e,stroke-width:1px,color:#0b1220
+    classDef digi fill:#ede9fe,stroke:#5b21b6,stroke-width:1px,color:#0b1220
+    classDef anlg fill:#ffe4e6,stroke:#9f1239,stroke-width:1px,color:#0b1220
+    classDef out  fill:#e5e7eb,stroke:#374151,stroke-width:1px,color:#0b1220
+
+    class SRC host
+    class GMR soft
+    class ALSA soft
+    class MUSB kern
+    class SAV digi
+    class AKM digi
+    class MA anlg
+    class SPK out
+
+    style BBG fill:#f8fafc,stroke:#475569,stroke-width:2px,color:#0b1220
+    style MX3S fill:#fdf4ff,stroke:#86198f,stroke-width:2px,color:#0b1220
 ```
 
 **The clock lives at the endpoint.** The playback endpoint enumerates as `ASYNC`: the DAC's own oscillator is
