@@ -82,7 +82,8 @@ subprocess.run(["systemctl", "restart", "gmediarender"])
 
 # 7. Final automated health check
 print("\n📊 Step 6: Auditing deployment health status...")
-result = subprocess.run(["systemctl", "is-active", "gmediarender"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
+result = subprocess.run(["systemctl", "is-active", "gmediarender"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        universal_newlines=True)
 
 if result.stdout.strip() == "active":
     print("\n🎉 GOAL!!! Valera Mladshoy successfully deployed to production!")
