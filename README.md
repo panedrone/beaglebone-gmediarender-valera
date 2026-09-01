@@ -221,7 +221,8 @@ cat /proc/asound/card1/stream0
 > chain. Note also `Feedback Format` - that is the DAC telling the host how fast to send, which is asynchronous
 > mode doing its job.
 
-* **Prove nothing is resampling - run this while a track is playing:**
+* **Prove nothing is resampling, and see which format the sender actually chose - run this while a
+  track is playing:**
 
 ```bash
 cat /proc/asound/card1/pcm0p/sub0/hw_params
@@ -240,6 +241,36 @@ The `rate` must match the source file. A 96 kHz file reporting `rate: 44100` mea
 resampler, and no setting in `/etc/asound.conf` can fix that - `playbin` builds its own `audioconvert` and
 `audioresample` a layer above ALSA. This file is the only honest proof of a bit-perfect path; the launch flags
 are not.
+
+It is also the fastest way to see what the sender is really doing, because `format` follows whatever
+foobar2000's UPnP plugin decided to stream - a setting that lives on the PC, not here:
+
+| `format` says | the plugin is sending | DAC altset |
+|:--|:--|:--|
+| `S24_3LE` | 24-bit, via `preferred-format=WAV` (or the FLAC default) | 2 |
+| `S16_LE` | 16-bit, via `preferred-format=LPCM` - that is `audio/L16`, 16 bits by definition | 1 |
+
+Cross-check it against the wire, which settles the FLAC-versus-WAV question without guessing:
+
+```bash
+a=$(awk '/eth0:/{print $2}' /proc/net/dev); sleep 8; b=$(awk '/eth0:/{print $2}' /proc/net/dev); echo $(( (b-a)/8 )) bytes/s
+
+```
+
+    ~176 KB/s  ->  16-bit LPCM      (176400 B/s raw)
+    ~272 KB/s  ->  24-bit FLAC      (larger than raw 24-bit - it is not compressing anything)
+    ~296 KB/s  ->  24-bit WAV       (264600 B/s raw, plus HTTP/TCP overhead)
+
+> **The FLAC finding - read this if you hear a periodic click.** The plugin defaults to
+> `preferred-format=FLAC`, and on this board that default produces an audible click roughly once a
+> minute. foobar2000 streams the entire session as one FLAC of unknown length, and GStreamer 1.8.3
+> here does not survive it cleanly; the plugin's own config file warns about this class of device
+> outright - *"Many report that they support FLAC yet fail to play an infinite length FLAC stream"*.
+> It is also pure overhead: foobar encodes at speed, so the FLAC stream measures **larger** than raw
+> 24-bit PCM while still costing the board a real-time decode. Switching to `preferred-format=WAV`
+> removes the decoder and keeps all 24 bits - identical `format`, identical altset, identical packet
+> size, minus the clicks. See the foobar2000 section below for the full comparison, and the click
+> hunt section for how everything else in the chain was eliminated first.
 
 ### Industrial Storage Health (eMMC)
 
@@ -260,6 +291,52 @@ df -h
     tmpfs           5.0M  4.0K  5.0M   1% /run/lock
     tmpfs           242M     0  242M   0% /sys/fs/cgroup
     tmpfs            49M     0   49M   0% /run/user/0
+
+#### Stop the daily writes that buy nothing
+
+Stretch is end-of-life, so the only entry in `sources.list` points at `archive.debian.org` - a frozen
+archive whose contents will never change again. Yet `apt-daily.timer` and `apt-daily-upgrade.timer`
+ship enabled, and every day they re-download ~28 MB of package lists and rebuild ~46 MB of binary
+caches from that immutable archive.
+
+On a board praised for its industrial eMMC and month-long uptimes, that is a daily rewrite of 74 MB of
+flash for exactly nothing - plus a daily burst of network and disk activity on a machine whose timing
+we care about enough to have hunted a click through it.
+
+```bash
+sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
+
+```
+
+Then clear what they already accumulated, once:
+
+```bash
+sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+
+```
+
+That returned 74 MB here, taking the root filesystem from 97% to 95% full. `apt-get install` will
+refuse to work until you run `apt-get update` yourself - which is the point: the lists come back when
+you actually need them, not every morning. Re-enable the timers with `systemctl enable` if you ever
+want the old behaviour back.
+
+A further ~69 MB sits in `/opt/source`, which belongs to no package at all - it is a set of git
+checkouts the factory image ships. Device trees for kernels that are not installed (this board runs
+4.9.78) and `BBBlfs`, a USB boot utility with no role here:
+
+```bash
+sudo rm -rf /opt/source/BBBlfs /opt/source/dtb-4.4-ti /opt/source/dtb-4.14-ti
+
+```
+
+All three are plain git clones and come back with a `git clone` if ever wanted. **Leave
+`/opt/source/bb.org-overlays` alone** - the device tree overlays that strip the onboard audio codec
+depend on it.
+
+Beyond that the factory image still carries a browser, an IDE, a desktop icon set and an OpenCL SDK
+for a different SoC - well over a gigabyte. Removing those means removing packages, and on an archived
+distribution that is close to irreversible, so it is left as a deliberate decision rather than a
+recipe.
 
 * **Inspect free RAM and system load average (ensuring < 0.1 during playback):**
 
@@ -300,14 +377,51 @@ unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for 
 
 ## Configure foobar2000 on Windows 11
 
-1. Navigate to `Preferences -> Playback -> Output -> Devices` and choose **BeagleBone Topping**.
-2. Set the output bit depth to **24-bit** - not 32. The MX3s offers only `S16_LE` and `S24_3LE` over USB, so a
-   32-bit stream cannot reach it intact and merely forces a downconversion inside the pipeline.
-3. Leave the DSP chain empty: no resampler, no volume normalisation, no ReplayGain applied at output.
-4. Fire up your heavy metal stream and enjoy pure hardware rendering.
+**The renderer is not configured under `Output -> Devices`.** That page lists local sound cards, and its
+bit-depth setting has no effect whatsoever on a UPnP renderer - the stream format is decided by the
+plugin. Go to `Preferences -> Playback -> Output -> UPnP MediaRenderer Output`, which is a text
+configuration, and set:
 
-> **On DSD:** it does not work in this build, and cannot. GStreamer 1.8.3 has no DSD decoder (`dsddec` arrived
-> in 1.24), and the DAC has no DSD altsetting to receive it anyway. Feed it PCM.
+```
+preferred-format=WAV
+```
+
+Then leave the DSP chain empty - no resampler, no volume normalisation, no ReplayGain at output - and
+start playback. The renderer negotiates the format when a stream begins, so a change here needs
+playback restarted, not just applied.
+
+### Why WAV and not the other two
+
+The plugin offers `FLAC`, `WAV` and `LPCM`, and defaults to FLAC. On this board that default is the
+wrong choice, and not by a small margin. Measured on the wire and at `hw_params`:
+
+| `preferred-format` | wire | ALSA gets | DAC altset | decoder on the board | clicks |
+|:--|--:|:--|:--|:--|:--|
+| `FLAC` (default) | ~272 KB/s | `S24_3LE` | 2 | yes, real-time FLAC | **yes** |
+| `LPCM` | ~176 KB/s | `S16_LE` | 1 | no | no |
+| `WAV` | ~296 KB/s | `S24_3LE` | 2 | no | no |
+
+**FLAC produces a periodic click.** foobar2000 streams the whole session as a single FLAC of unknown
+length, and GStreamer 1.8.3 on this board does not survive it cleanly. The plugin's own configuration
+file warns about exactly this class of device: *"Many report that they support FLAC yet fail to play an
+infinite length FLAC stream"*. It also buys nothing here - foobar encodes at speed, so the FLAC stream
+measured *larger* than raw 24-bit PCM. The board spends cycles unpacking a stream that was never
+compressed.
+
+**LPCM is `audio/L16`, which is 16 bits by definition.** There is no 24-bit LPCM in this plugin, so
+choosing it silently halves the format ceiling. Fine for CD-rip material, a truncation for hi-res.
+
+**WAV keeps 24 bits and removes the decoder.** Same altset, same USB packet size, same bytes per frame
+as the FLAC path - only the decode is gone. That is why it is the right answer rather than a
+compromise, and why the click hunt used it as the deciding experiment: it changes one variable.
+
+On bit depth: match the material, do not maximise it. A 16-bit source padded to 24 gains nothing and
+costs half again as much bandwidth. And 32 bits cannot reach this DAC at all - `stream0` lists exactly
+two formats, `S16_LE` and `S24_3LE`, so a 32-bit stream only guarantees a conversion earlier in the
+chain.
+
+> **On DSD:** it does not work in this build, and cannot. GStreamer 1.8.3 has no DSD decoder (`dsddec`
+> arrived in 1.24), and the DAC has no DSD altsetting to receive it anyway. Feed it PCM.
 
 ## Hardware Maintenance Note
 
@@ -380,6 +494,104 @@ sudo systemctl reset-failed gmediarender
 sudo systemctl stop gmediarender
 
 ```
+
+### Hunting a Periodic Click
+
+A click that arrives on a schedule is not a cable fault until proven otherwise - a cable does not keep
+time. Something on the board does. `valera_click_hunt.py` runs on the board while sound is playing and
+watches three layers at once, because they fail independently:
+
+| layer | what it samples | what it catches |
+|:--|:--|:--|
+| ALSA ring | `state`, buffer fill, `avail_max` | the pipeline missing its deadline |
+| USB | host controller irq/s, the DAC feedback value, hardware `delay` | a missed isochronous slot |
+| machine | per-process CPU, datagrams sent, interface bytes, kernel ring buffer | housekeeping bursts and network stalls |
+
+**A full ALSA ring does not prove the USB stream is clean.** The ring sits above the URB queue: if
+MUSB is late submitting a URB for its 125 us slot, the DAC's FIFO empties for an instant and clicks,
+while the 200 ms ring never notices a thing. On AM335x that is the weak link, not the buffer.
+
+Copy it over and run it during playback:
+
+```bash
+scp valera_click_hunt.py root@beaglebone.local:~/
+
+```
+
+```bash
+sudo ./valera_click_hunt.py -s 300
+
+```
+
+Press Enter every time you hear a click. Those markers are the only thing that ties the audible
+symptom to what the board was actually doing, and the report correlates them against every event
+class it recorded.
+
+#### Bisecting the chain
+
+`--tone` drives the DAC directly through `speaker-test` - no network, no UPnP, no GStreamer anywhere
+in the path, just ALSA to USB to the DAC. **Turn the amplifier down first**, then:
+
+```bash
+sudo ./valera_click_hunt.py --tone -s 300
+
+```
+
+A click on a steady sine is also far easier to hear than one buried in music. The answer is binary:
+if the click survives `--tone`, everything above ALSA is innocent; if it vanishes, the fault is in
+GStreamer, libupnp or the source.
+
+#### Reading the verdict
+
+* **`DRAIN` / `STARVE` / `STALL`** - the pipeline missed its deadline and the ring ran dry. A
+  scheduling problem: governor, daemon priority, or whatever the `CPU` line names.
+* **`USBIRQ` / `DELAY` / `FEEDBACK`** - the ring was full but the USB layer twitched. The click
+  happened *below* ALSA: isochronous scheduling, the port, the cable, or the DAC's feedback loop.
+* **`CPUSPIKE`** - a process burned far more than its own normal share for one
+  second. Judged against each process's own median, not a fixed threshold: periodic
+  housekeeping on a board this slow never crosses a fixed bar, it only stands out
+  against itself.
+* **`NET`** - a burst of datagrams or a stall in the incoming stream. A UPnP renderer
+  re-advertises itself over SSDP from inside the same process that feeds the DAC, and
+  that burst lands here without needing tcpdump.
+* **Nothing correlates** - the ring stayed full, the URB queue stayed steady, no spike. Then it is
+  not the board at all: power rail, ground, or the DAC acting on its own.
+
+Two notes on this particular kernel. `4.9.78-ti-r94` is built without `CONFIG_SND_DEBUG`, so
+`xrun_debug` does not exist and **the kernel cannot log an underrun** - the `avail_max` series is the
+only underrun evidence available. And the board has two MUSB controllers: `musb-hdrc.0` is the unused
+gadget port with permanently zero interrupts, `musb-hdrc.1` is the one the DAC hangs off. Watching the
+wrong one produces a screenful of meaningless alarms; the tool now reads the right name out of
+`/proc/asound/card1/stream0`.
+
+The report closes with an inventory of everything on the board that wakes on a schedule - systemd
+timers, `cron`, and running services - because a 60 s period has to come from somewhere.
+
+#### What it actually found here
+
+Worth recording, because the answer was nowhere near where the search started. A click roughly once a
+minute turned out to be the FLAC decoder (see the foobar2000 section). Everything eliminated on the
+way, and what eliminated it:
+
+* **Scheduled load** - no timer or cron job has a minute period on this board, and no process other
+  than `gmediarender` ever crossed 12% of the core in any second.
+* **The pipeline starving** - the ALSA ring never fell below 93% of its 200 ms across three runs.
+* **The USB layer, the cable, the DAC, the power rail** - `--silence` streams zeroes in the identical
+  format, altset and byte rate. Five minutes, not one click. That one test cleared the whole lower half
+  of the chain at once.
+* **GStreamer's sink** - the trace showed the pipeline clock *is* `GstAudioSinkClock`, so the sink is
+  the clock master and never slaves or skews. `skew 0`, `drop 0`, and the only two `resync` lines were
+  at track start.
+* **The clicks were never periodic.** The gaps were 14, 24, 65, 92, 49 s. "Once a minute" was an
+  average, not a rhythm - which is what ruled out scheduled work early.
+
+Two false leads are worth naming, because both looked convincing:
+
+* `avail_max: 8379` on a 8820-frame buffer reads like a near-underrun. It is `buffer_size -
+  period_size`, the value every stream shows after its first period is written. A start-up artefact.
+* The DAC's feedback swinging 4974 ppm, with **every** marked click landing within 2 s of a swing. But
+  those events blanketed 66% of the timeline, so chance alone predicted almost as many hits. This is
+  why the verdict now prints an `expect` column - a chatty event class convicts itself otherwise.
 
 ### Network & End-Point Visibility
 
