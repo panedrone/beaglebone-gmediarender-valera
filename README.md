@@ -594,6 +594,113 @@ Two false leads are worth naming, because both looked convincing:
   those events blanketed 66% of the timeline, so chance alone predicted almost as many hits. This is
   why the verdict now prints an `expect` column - a chatty event class convicts itself otherwise.
 
+#### The second hunt: a burble, and four days of instruments lying
+
+The click hunt above found the FLAC decoder. What remained afterwards was a
+different artefact - a soft burble rather than a tick, arriving in bursts:
+sometimes once in a track, sometimes several inside one passage. It is worth
+recording separately, because the search went wrong in a way that is easy to
+repeat.
+
+**Every instrument used on it produced a false positive at some point.** Four of
+them, all found by cross-checking rather than by the tool noticing:
+
+* **The tone generator clicked by itself.** `--tone` originally looped a 5 s
+  file with `while :; do cat f; done | aplay`. Respawning `cat` jitters the pipe
+  aplay reads, and the ALSA ring never shows it because the ring stays full.
+  That harness produced ~35 clicks a minute on its own. Playing one file sized
+  to the whole run, with no loop and no pipe, dropped it to nothing.
+* **`expect` lied on every interrupted run.** `report()` was passed the
+  *requested* duration, not the elapsed one. Stopping a 600 s run at 40 s
+  divided every coverage figure by fifteen, and both event classes came out
+  stamped `BEYOND CHANCE`. Corrected values were equal to the hit counts -
+  pure chance, as before.
+* **`NET` correlated with clicks by construction.** The marker is Enter over
+  ssh, so the keystroke *is* the network traffic it then correlates against.
+  174 bytes in, 90 out, once per click. That class can never convict while
+  markers are typed remotely.
+* **The USB interrupt dips were the hunter's own load.** Its reports showed
+  `min 6590` against a median of 7939, a 17% shortfall that looked like missed
+  isochronous slots. Measured without the hunter running, the minimum is 7916
+  and the spread is 0.6%.
+
+`--silence` also has a blind spot worth naming, since the first hunt leaned on
+it: a dropped isochronous packet against digital zeroes is a zero followed by a
+zero. It is inaudible. That test excludes continuous mechanisms - hum, coupling,
+a ground loop - and is deaf to dropouts, which is the failure a marginal supply
+actually produces. It never cleared the lower half of the chain; the write-up
+above claimed it did, and that was wrong.
+
+**What survived.** With `gmediarender` stopped, no network in the path and the
+source a raw file in `/dev/shm`, the burble reproduces identically across every
+route to the hardware:
+
+| path | geometry | result |
+|:--|:--|:--|
+| `hw:1,0` | 10 / 20 / 40 / 80 ms periods | burbles |
+| `plughw:1,0` | aplay defaults, ~125 ms | burbles |
+| `plug` &rarr; `dmix` at 48 kHz | its own, with resampling | burbles |
+
+Four buffer geometries spanning eight to one, three different routes, one with
+a resampler and a mixing thread in the way. No difference. Meanwhile the ALSA
+ring never fell below 95% of its 8820 frames, the MUSB interrupt rate held
+7960-7968/s with no second below 2% of median, and no process crossed its own
+normal CPU share.
+
+So the pipeline, the buffer geometry, the renderer and the network are all
+excluded, and nothing the board can count moves with the fault. That leaves what
+the board cannot count: the supply rail, the connector, the cable, the USB PHY.
+Powering the board from a PC port - a supply known bad here by ear - made it
+audibly worse, which is the only dose-response result of the whole hunt.
+
+**What it was: two periodic endpoints on one weak scheduler.** The MX3s
+enumerates a HID interface alongside its audio ones - the volume buttons on its
+own front panel:
+
+```
+hid-generic 0003:262A:196F.0002: input,hidraw0: USB HID v1.00 Device [TOPPING MX3s]
+```
+
+So the bus carries two periodic schedules at once: the 125 us isochronous audio
+stream and the HID interrupt poll. The MUSB host controller in the AM335x
+schedules periodic transfers in software, and it handles that pairing badly.
+The two periods drift through each other; where they coincide the DAC loses
+slots, and where they separate it is silent. That is the burst pattern, and it
+explains why nothing on the board ever saw it: a dropped isochronous packet is
+never retried and never logged, and it happens below ALSA, which is why no
+buffer geometry and no route to the hardware made any difference.
+
+Unbinding `usbhid` from the interface and counting, minute by minute, against
+the same run with it bound: burbling constantly with HID, 38 in five minutes
+without. Made permanent by telling the driver to ignore the device rather than
+unbinding it after the fact - a udev rule matching the interface fires, but the
+`unbind` inside an `add` event does not take:
+
+```
+cmdline=coherent_pool=1M net.ifnames=0 quiet usbhid.quirks=0x262a:0x196f:0x00000004
+```
+
+`0x4` is `HID_QUIRK_IGNORE`. The parameter is read-only at runtime in this
+kernel, so it has to go on the kernel command line in `/boot/uEnv.txt` and
+needs a reboot. Verify with `cat /proc/cmdline`, that
+`ls /sys/bus/usb/drivers/usbhid/` no longer lists the interface, and that
+`aplay -l` still shows the card - the quirk suppresses only the HID interface,
+`snd-usb-audio` still claims interfaces 1 and 2. The interface carries nothing
+a headless renderer uses.
+
+**On music, that is the end of it.** The residual 38 per five minutes are
+audible on a continuous tone and masked by dense material - which is the whole
+reason the sine was built as the instrument, and the reason its count must not
+be read as the practical result.
+
+**Excluded on the way, each by direct experiment rather than by argument:** the
+supply (unchanged on returning to the filter), the USB cable (replaced, no
+change), the ALSA configuration (`hw`, `plughw` and `dmix` alike), the buffer
+geometry (10/20/40/80 ms periods, and an interrupt rate flat to 0.5% across all
+four), the device tree overlays (`uEnv.txt` turned out never to have been
+touched), and the DAC and amplifier themselves (a different source plays through
+both cleanly).
+
 ### Network & End-Point Visibility
 
 Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
