@@ -36,7 +36,10 @@ Python 3.5 compatible (Debian 9 stretch ships 3.5): no f-strings, no text=.
 import os
 import re
 import sys
+import math
 import time
+import signal
+import struct
 import threading
 import subprocess
 
@@ -355,6 +358,35 @@ def coverage(times, duration):
     return total / duration
 
 
+def make_sine_s24_3le(path, rate=44100, freq=441, seconds=5, dbfs=-6.0):
+    """A sine in the exact format real playback uses, so the test loads the
+    USB bus to the byte like music does.
+
+    441 Hz at 44100 is exactly 100 frames per cycle, so the file is one cycle
+    repeated - it costs nothing to make and every sample is exact.
+
+    The file is sized to the whole run on purpose. An earlier version played a
+    5 s file through `while :; do cat f; done | aplay`, and that harness turned
+    out to click about 35 times a minute all by itself - respawning `cat` every
+    five seconds jitters the pipe that aplay is reading, and the ALSA ring
+    never shows it because the ring stays full the whole time. Playing one file
+    with no loop and no pipe dropped that to nothing. A test that manufactures
+    discontinuities cannot be used to hunt discontinuities."""
+    amp = int((2 ** 23 - 1) * (10.0 ** (dbfs / 20.0)))
+    frames_per_cycle = rate // freq
+    cycle = bytearray()
+    for i in range(frames_per_cycle):
+        v = int(amp * math.sin(2.0 * math.pi * i / frames_per_cycle))
+        if v < 0:
+            v += 1 << 24
+        sample = struct.pack("<I", v)[:3]
+        cycle += sample + sample          # both channels, identical
+    cycles = (rate * seconds) // frames_per_cycle
+    with open(path, "wb") as fh:
+        fh.write(bytes(cycle) * cycles)
+    return path
+
+
 def main():
     seconds = 240
     card = None
@@ -425,15 +457,41 @@ def main():
                    "--buffer-size", "8820", "-t", "raw", "/dev/zero"]
             what = "digital silence in S24_3LE, 10 ms periods like GStreamer"
         else:
-            cmd = ["speaker-test", "-D", "hw:{0},0".format(card), "-c", "2",
-                   "-t", "sine", "-f", "440", "-F", "S16_LE", "-r", "44100"]
-            what = "a 440 Hz sine in S16_LE"
+            # speaker-test is NOT used here, deliberately. In alsa-utils 1.1.3
+            # it emits only S8/S16/S32/FLOAT; S24_3LE is not in its list, and
+            # the MX3s accepts only S16_LE and S24_3LE, so it would drop the
+            # test to altset 1 - 4 bytes per frame instead of 6, two thirds of
+            # the real isochronous load. A clean run under that proves nothing
+            # about a fault that only shows at full bandwidth, which is exactly
+            # the fault we are here to exclude.
+            #
+            # So generate the sine ourselves and push it through the identical
+            # aplay geometry --silence uses. Same format, same altset, same
+            # bytes per second as music - and, unlike silence, a dropped packet
+            # is plainly audible against it. That combination is the point.
+            # /dev/shm is 242 MB here and 24-bit stereo at 44.1 kHz costs
+            # 264600 B/s, so a run longer than this cannot be held as one
+            # file. Refuse rather than quietly fall back to looping.
+            budget = 880
+            if seconds > budget:
+                print("--tone is limited to {0} s (one file must fit in "
+                      "/dev/shm); asked for {1}".format(budget, seconds))
+                return 1
+            sine = make_sine_s24_3le("/dev/shm/valera_sine.raw",
+                                     seconds=seconds + 5)
+            cmd = ["aplay", "-q", "-D", "hw:{0},0".format(card),
+                   "-f", "S24_3LE", "-c", "2", "-r", "44100",
+                   "--period-size", "441", "--buffer-size", "8820",
+                   "-t", "raw", sine]
+            what = "a 441 Hz sine in S24_3LE, -6 dBFS, 10 ms periods"
         print("driving hw:{0},0 with {1} - TURN THE AMPLIFIER DOWN FIRST".format(
             card, what))
         try:
+            # Own process group: cheap insurance that nothing is left
+            # holding hw:1,0 open after the run.
             tone_proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
-                universal_newlines=True)
+                universal_newlines=True, preexec_fn=os.setsid)
         except OSError as exc:
             print("could not start {0}: {1}".format(cmd[0], exc))
             return 1
@@ -619,14 +677,32 @@ def main():
     if prev_xrun_debug is not None:
         write_text(XRUN_DEBUG, prev_xrun_debug.strip() or "0")
     if tone_proc is not None and tone_proc.poll() is None:
-        tone_proc.terminate()
+        try:
+            os.killpg(os.getpgid(tone_proc.pid), signal.SIGTERM)
+        except OSError:
+            tone_proc.terminate()
         try:
             tone_proc.wait(timeout=5)
         except Exception:
-            tone_proc.kill()
+            try:
+                os.killpg(os.getpgid(tone_proc.pid), signal.SIGKILL)
+            except OSError:
+                tone_proc.kill()
+    try:
+        os.unlink("/dev/shm/valera_sine.raw")
+    except OSError:
+        pass
+
+    # How long the run ACTUALLY lasted, not how long it was asked to last.
+    # Ctrl-C is the normal way to end this thing, and feeding the requested
+    # duration to report() divides every coverage figure by a run that never
+    # happened: `expect` comes out that many times too small and every chatty
+    # event class is stamped BEYOND CHANCE. A 40 s stop out of a 600 s request
+    # deflated it 15-fold and convicted both classes in the report it printed.
+    elapsed = max(time.monotonic() - t0, SAMPLE)
 
     analyse_series(series, timeline, period_size, buffer_size)
-    report(timeline, series, low_water, buffer_size, seconds)
+    report(timeline, series, low_water, buffer_size, elapsed)
     inventory()
     return 0
 
@@ -815,6 +891,12 @@ def report(timeline, series, low_water, buffer_size, duration):
             kind, len(others), 100.0 * coverage(others, duration), hits,
             expect, verdict))
     print()
+    if duration < 30:
+        print("  !! run was only {0:.0f} s - too short for any of this to mean"
+              " much.".format(duration))
+    print("  !! NET cannot convict anything while you are pressing Enter over")
+    print("     ssh: the keystroke IS the traffic. Ignore NET unless the")
+    print("     markers were typed on the console.")
     print("  'expect' is how many of these clicks would land in that class's")
     print("  windows by pure chance. Hits at or below it prove nothing.")
 
