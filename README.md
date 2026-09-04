@@ -22,8 +22,9 @@ esoteric cables or uncontrolled sample-rate conversions).
 2. **Hardware Binding (Direct to `hw:1,0`):** The UPnP/DLNA stream is delivered via GStreamer
    (`-o gst --gstout-audiosink=alsasink`) onto the raw hardware device, routed there by `/etc/asound.conf`,
    with ALSA's `dmix` software mixer out of the path entirely.
-3. **Lifting Digital Constraints:** The endpoint initializes strictly at 100% volume (`--initial-volume=100`) at the
-   daemon level to maintain an absolute bit-perfect stream over the network.
+3. **Lifting Digital Constraints:** The renderer runs at volume 100 (0 dB), where `playbin`'s volume element sits in
+   passthrough and touches no samples. This is the daemon's own default - there is no launch flag in `ExecStart`,
+   and it needs none. What matters is that the control point never moves the slider (see the check below).
 4. **Power Supply:** Powered from a PC USB port, I could hear the PC. Anything that gets the board off that rail
    fixes it - a powerbank, a USB socket on a mains filter, even a phone charger. A linear supply (~$50) is the
    ideal, but not a prerequisite.
@@ -597,12 +598,83 @@ Two false leads are worth naming, because both looked convincing:
 
 Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
 
-* **Check active network sockets and port binding (UPnP port 8200):**
+* **Check active network sockets and port binding:**
 
 ```bash
 sudo ss -tulpn | grep gmediarender
 
 ```
+
+    udp UNCONN 0 0 *:1900              users:(("gmediarender",pid=1199,fd=76))
+    tcp LISTEN 0 128 192.168.0.105:49494 users:(("gmediarender",pid=1199,fd=72))
+
+No port is pinned in `ExecStart`, so libupnp picks one out of `[49152..65535]` at start and it can differ
+after a restart. `1900/udp` is SSDP and is fixed. Read the TCP port out of this listing rather than
+assuming a number.
+
+* **Verify the renderer is still at volume 100 - the actual bit-perfect invariant:**
+
+The daemon starts at 0 dB by itself, but a control point can move the slider at any time, and the moment
+it does, `playbin`'s volume element leaves passthrough and starts scaling samples in software. No launch
+flag can prevent that; the only honest check is to ask the running renderer. Substitute the port from the
+listing above:
+
+```bash
+curl -s -X POST http://192.168.0.105:49494/upnp/control/rendercontrol1 -H 'Content-Type: text/xml; charset="utf-8"' -H 'SOAPACTION: "urn:schemas-upnp-org:service:RenderingControl:1#GetVolume"' -d '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume></s:Body></s:Envelope>'
+
+```
+
+    <CurrentVolume>100</CurrentVolume>
+
+Anything below 100 means the stream is being attenuated on this board. The control URL comes from
+`gmediarender --dump-devicedesc`.
+
+> **There is no `--initial-volume` flag in this build.** The volume option this version of
+> gmrender-resurrect actually offers is `--gstout-initial-volume-db` (`0.0` = max, `-6` = half), listed
+> under `gmediarender --help-gstout`. Since 0 dB is already the default, adding it changes nothing - and
+> adding the non-existent spelling would stop the daemon from starting at all, because glib's option
+> parser rejects unknown options outright. Check `--help-all` before putting any flag in the unit.
+
+#### The volume slider is the one hole in the bit-perfect claim
+
+Worth stating plainly, because it is a mouse wheel away and nothing in the chain warns about it.
+foobar2000's volume control is wired straight to this renderer: `foo_out_upnp.dll` carries
+`UPnP Volume Control`, `SetVolume`, `SetMute`, `VolumeMin`/`VolumeMax` and subscribes to
+`urn:schemas-upnp-org:service:RenderingControl:*`. Moving that slider sends SOAP to the board,
+gmediarender puts the value on `playbin`'s `volume` property, and every sample gets multiplied in
+floating point. Everything else documented here - `hw:1,0`, no dmix, WAV over FLAC, matching altset -
+is undone by that one control.
+
+**It cannot be switched off from either side.**
+
+* On the board: `gmediarender --help-all` lists every option this build has. RenderingControl is
+  compiled in and there is no flag to suppress it.
+* In foobar2000: the complete set of keys `foo_out_upnp.dll` recognises is `stream-title`,
+  `preferred-format`, `forced-format`, `bitdepth-max`, `supports-FLAC`, `supports-WAV`,
+  `supports-LPCM`, `supports-pause`, `supports-chunked`, `supports-infinite-length`,
+  `zero-length-WAV`, `send-accept-ranges`, `accept-ranges`, `reports-time`. There is no volume key
+  in any spelling.
+
+So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the MX3s
+itself**, where the control is analog and downstream of the DAC. The state lives only in the running
+daemon's memory, so `systemctl restart gmediarender` unconditionally returns it to 100.
+
+The MX3s does also expose a digital volume of its own over USB Audio Class, separate from UPnP and
+untouched by foobar2000:
+
+```bash
+amixer -c 1 sget PCM
+
+```
+
+    Simple mixer control 'PCM',0
+      Capabilities: pvolume pswitch pswitch-joined
+      Limits: Playback 0 - 15
+      Front Left: Playback 15 [100%] [0.00dB] [on]
+
+Confirm it reads `[0.00dB]` - that is the Savitech bridge not attenuating. It is worth checking once
+and then leaving alone: sixteen steps across the whole range is a mute switch with pretensions, not a
+volume control.
 
 * **Ping the board locally to verify zero-latency connection:**
 
