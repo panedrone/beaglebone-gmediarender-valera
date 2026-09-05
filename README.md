@@ -251,10 +251,10 @@ are not.
 It is also the fastest way to see what the sender is really doing, because `format` follows whatever
 foobar2000's UPnP plugin decided to stream - a setting that lives on the PC, not here:
 
-| `format` says | the plugin is sending | DAC altset |
-|:--|:--|:--|
-| `S24_3LE` | 24-bit, via `preferred-format=WAV` (or the FLAC default) | 2 |
-| `S16_LE` | 16-bit, via `preferred-format=LPCM` - that is `audio/L16`, 16 bits by definition | 1 |
+| `format` says | the plugin is sending                                                            | DAC altset |
+|:--------------|:---------------------------------------------------------------------------------|:-----------|
+| `S24_3LE`     | 24-bit, via `preferred-format=WAV` (or the FLAC default)                         | 2          |
+| `S16_LE`      | 16-bit, via `preferred-format=LPCM` - that is `audio/L16`, 16 bits by definition | 1          |
 
 Cross-check it against the wire, which settles the FLAC-versus-WAV question without guessing:
 
@@ -407,11 +407,11 @@ playback restarted, not just applied.
 The plugin offers `FLAC`, `WAV` and `LPCM`, and defaults to FLAC. On this board that default is the
 wrong choice, and not by a small margin. Measured on the wire and at `hw_params`:
 
-| `preferred-format` | wire | ALSA gets | DAC altset | decoder on the board | clicks |
-|:--|--:|:--|:--|:--|:--|
-| `FLAC` (default) | ~272 KB/s | `S24_3LE` | 2 | yes, real-time FLAC | **yes** |
-| `LPCM` | ~176 KB/s | `S16_LE` | 1 | no | no |
-| `WAV` | ~296 KB/s | `S24_3LE` | 2 | no | no |
+| `preferred-format` |      wire | ALSA gets | DAC altset | decoder on the board | clicks  |
+|:-------------------|----------:|:----------|:-----------|:---------------------|:--------|
+| `FLAC` (default)   | ~272 KB/s | `S24_3LE` | 2          | yes, real-time FLAC  | **yes** |
+| `LPCM`             | ~176 KB/s | `S16_LE`  | 1          | no                   | no      |
+| `WAV`              | ~296 KB/s | `S24_3LE` | 2          | no                   | no      |
 
 ~~**FLAC produces a periodic click.**~~ **Withdrawn 2026-09-05 - it was the kernel.** Kept below
 as originally written. WAV remains a perfectly reasonable choice, but it is no longer the fix for
@@ -520,11 +520,11 @@ A click that arrives on a schedule is not a cable fault until proven otherwise -
 time. Something on the board does. `valera_click_hunt.py` runs on the board while sound is playing and
 watches three layers at once, because they fail independently:
 
-| layer | what it samples | what it catches |
-|:--|:--|:--|
-| ALSA ring | `state`, buffer fill, `avail_max` | the pipeline missing its deadline |
-| USB | host controller irq/s, the DAC feedback value, hardware `delay` | a missed isochronous slot |
-| machine | per-process CPU, datagrams sent, interface bytes, kernel ring buffer | housekeeping bursts and network stalls |
+| layer     | what it samples                                                      | what it catches                        |
+|:----------|:---------------------------------------------------------------------|:---------------------------------------|
+| ALSA ring | `state`, buffer fill, `avail_max`                                    | the pipeline missing its deadline      |
+| USB       | host controller irq/s, the DAC feedback value, hardware `delay`      | a missed isochronous slot              |
+| machine   | per-process CPU, datagrams sent, interface bytes, kernel ring buffer | housekeeping bursts and network stalls |
 
 **A full ALSA ring does not prove the USB stream is clean.** The ring sits above the URB queue: if
 MUSB is late submitting a URB for its 125 us slot, the DAC's FIFO empties for an instant and clicks,
@@ -653,11 +653,11 @@ above claimed it did, and that was wrong.
 source a raw file in `/dev/shm`, the burble reproduces identically across every
 route to the hardware:
 
-| path | geometry | result |
-|:--|:--|:--|
-| `hw:1,0` | 10 / 20 / 40 / 80 ms periods | burbles |
-| `plughw:1,0` | aplay defaults, ~125 ms | burbles |
-| `plug` &rarr; `dmix` at 48 kHz | its own, with resampling | burbles |
+| path                           | geometry                     | result  |
+|:-------------------------------|:-----------------------------|:--------|
+| `hw:1,0`                       | 10 / 20 / 40 / 80 ms periods | burbles |
+| `plughw:1,0`                   | aplay defaults, ~125 ms      | burbles |
+| `plug` &rarr; `dmix` at 48 kHz | its own, with resampling     | burbles |
 
 Four buffer geometries spanning eight to one, three different routes, one with
 a resampler and a mixing thread in the way. No difference. Meanwhile the ALSA
@@ -770,12 +770,12 @@ Pull the card and the old system is back, unchanged.
 **The newest image made it dramatically worse.** Debian 13 with `6.18.39-bone44`
 delivers exactly five sixths of the stream:
 
-| rate | delivered | ratio |
-|--:|--:|--:|
-| 44100 | 36774 | 0.8339 |
-| 48000 | 40002 | 0.8334 |
-| 88200 | 73570 | 0.8341 |
-| 96000 | 80076 | 0.8341 |
+|  rate | delivered |  ratio |
+|------:|----------:|-------:|
+| 44100 |     36774 | 0.8339 |
+| 48000 |     40002 | 0.8334 |
+| 88200 |     73570 | 0.8341 |
+| 96000 |     80076 | 0.8341 |
 
 The same fraction on both DACs, both formats and both settings of the
 `snd_usb_audio` `lowlatency` parameter, with the CPU idle, no xruns and nothing
@@ -798,11 +798,11 @@ before the rework. First try:
 Exact - and the feedback loop is steady, with no trace of the 44320 that two
 hunts could not explain.
 
-| | 4.9.78-ti-r94 | **5.10.240-bone80** | 6.18.39-bone44 |
-|:--|--:|--:|--:|
-| DAC asks | 44320 Hz (4974 ppm off) | **44100 Hz** | 44100 Hz |
-| host delivers | 43956 Hz (-0.33%) | **44100 Hz (0.00%)** | 36807 Hz (-16.6%) |
-| by ear | burbles, in bursts | **clean** | constant distortion |
+|               |           4.9.78-ti-r94 |  **5.10.240-bone80** |      6.18.39-bone44 |
+|:--------------|------------------------:|---------------------:|--------------------:|
+| DAC asks      | 44320 Hz (4974 ppm off) |         **44100 Hz** |            44100 Hz |
+| host delivers |       43956 Hz (-0.33%) | **44100 Hz (0.00%)** |   36807 Hz (-16.6%) |
+| by ear        |      burbles, in bursts |            **clean** | constant distortion |
 
 #### The second DAC, and why it settles the bandwidth question
 
@@ -813,16 +813,16 @@ integrated amplifier with a **Thesycon/XMOS bridge, `152a:85dd`** - a different
 vendor, a different USB audio class and a different set of capabilities from the
 Savitech unit:
 
-| | Topping MX3s | SMSL |
-|:--|:--|:--|
-| bridge | Savitech `262a:196f` | Thesycon/XMOS `152a:85dd` |
-| formats ALSA sees | `S16_LE`, `S24_3LE` | `S32_LE` only |
-| `bSubslotSize` | 2 or 3 bytes | **4 bytes in every altsetting** |
-| bits carried | 16 / 24 | 24 or 32 inside a 32-bit slot |
-| top rate | 192 kHz | **768 kHz** |
-| DSD | none | **native, `DSD_U32_BE`, altset 3** |
-| `wMaxPacketSize` | 104 / **156** bytes | **776 bytes** |
-| host volume control | `PCM Playback Volume`, 16 steps | none at all |
+|                     | Topping MX3s                    | SMSL                               |
+|:--------------------|:--------------------------------|:-----------------------------------|
+| bridge              | Savitech `262a:196f`            | Thesycon/XMOS `152a:85dd`          |
+| formats ALSA sees   | `S16_LE`, `S24_3LE`             | `S32_LE` only                      |
+| `bSubslotSize`      | 2 or 3 bytes                    | **4 bytes in every altsetting**    |
+| bits carried        | 16 / 24                         | 24 or 32 inside a 32-bit slot      |
+| top rate            | 192 kHz                         | **768 kHz**                        |
+| DSD                 | none                            | **native, `DSD_U32_BE`, altset 3** |
+| `wMaxPacketSize`    | 104 / **156** bytes             | **776 bytes**                      |
+| host volume control | `PCM Playback Volume`, 16 steps | none at all                        |
 
 Note the last two rows. Because every subslot is 4 bytes wide, there is no
 lighter mode to fall back to - even the 24-bit altsetting costs 8 bytes per
@@ -831,6 +831,10 @@ larger than the Topping's. On the factory kernel that combination behaved
 catastrophically: roughly **120 burbles a minute** at 44.1 kHz where the Topping
 managed 9.6, and continuous crackle at 96 and 192 kHz.
 
+| ![smsl_raw-ha1.png](img/smsl_raw-ha1.png)                         |
+|:------------------------------------------------------------------|
+| SMSL RAW-HA1 Power Amplifier MQA MQA-CD XU316 32Bit/768kHz DSD256 |
+
 That produced a neat and completely wrong theory: that MUSB's endpoint FIFO
 cannot absorb a 776-byte reservation, and that a more capable DAC is therefore
 worse on this board than a modest one. It fitted every observation available at
@@ -838,11 +842,11 @@ the time.
 
 On `5.10.240-bone80`, with nothing else changed:
 
-| rate | delivered | ratio | DAC asked |
-|--:|--:|--:|--:|
-| 44 100 | 44 100 | **1.0000** | 44100-44101 |
-| 96 000 | 96 000 | **1.0000** | 95999-96000 |
-| 192 000 | 191 999 | **1.0000** | 191999-192000 |
+|    rate | delivered |      ratio |     DAC asked |
+|--------:|----------:|-----------:|--------------:|
+|  44 100 |    44 100 | **1.0000** |   44100-44101 |
+|  96 000 |    96 000 | **1.0000** |   95999-96000 |
+| 192 000 |   191 999 | **1.0000** | 191999-192000 |
 
 Three rates, exact delivery, and the feedback endpoint tracking to within a
 frame at each of them. The 776-byte reservation was never the problem, the
@@ -885,8 +889,8 @@ an artefact of it. Recorded in full, because each looked convincing at the time:
   scheduler saturates near 400 KB/s and that hi-res was therefore physically
   impossible here. On 5.10 the same board carries **2 822 400 bytes/s** - DSD128
   over DoP, `S32_LE` at 352.8 kHz - delivering 352856 frames/s against a nominal
-  352800. That is +160 ppm, which is normal tracking, and seven times the
-  ceiling that was confidently asserted.
+    352800. That is +160 ppm, which is normal tracking, and seven times the
+            ceiling that was confidently asserted.
 * **The endpoint's bandwidth reservation.** The 776-byte `wMaxPacketSize` of the
   768 kHz-capable DAC was blamed for starving MUSB's endpoint FIFO. That DAC now
   runs 44.1, 96 and 192 kHz at ratio 1.0000.
@@ -922,18 +926,18 @@ and it now runs on this:
     VERSION="13 (trixie)"
     VERSION_CODENAME=trixie
 
-| | factory eMMC | working microSD |
-|:--|:--|:--|
-| Debian | 9 (stretch), end of life, `archive.debian.org` | **13 (trixie)**, live repositories |
-| kernel | `4.9.78-ti-r94`, January 2018 | **`5.10.240-bone80`** |
-| root | `/dev/mmcblk1p1`, 3.5 G, 95% full | `/dev/mmcblk0p3`, 28 G, 7% full |
-| gmediarender | 0.0.7-git | **0.3** |
-| GStreamer | 1.8.3 | **1.26.0** |
-| libupnp | 1.6.19+git20160116 | **17.2.0** |
-| sink options | audiosink, audiodevice, volume | plus **`--gstout-audiopipe`**, `--gstout-buffer-duration`, `--mime-filter` |
-| DSD | impossible - no decoder in GStreamer 1.8.3 | **DSD128 over DoP, 5.6448 MHz** |
-| frame delivery | -0.33%, feedback loop broken | **0.00%, loop stable** |
-| ALSA card index | `hw:1,0` | `hw:0,0` - no onboard codec holds index 0 |
+|                 | factory eMMC                                   | working microSD                                                            |
+|:----------------|:-----------------------------------------------|:---------------------------------------------------------------------------|
+| Debian          | 9 (stretch), end of life, `archive.debian.org` | **13 (trixie)**, live repositories                                         |
+| kernel          | `4.9.78-ti-r94`, January 2018                  | **`5.10.240-bone80`**                                                      |
+| root            | `/dev/mmcblk1p1`, 3.5 G, 95% full              | `/dev/mmcblk0p3`, 28 G, 7% full                                            |
+| gmediarender    | 0.0.7-git                                      | **0.3**                                                                    |
+| GStreamer       | 1.8.3                                          | **1.26.0**                                                                 |
+| libupnp         | 1.6.19+git20160116                             | **17.2.0**                                                                 |
+| sink options    | audiosink, audiodevice, volume                 | plus **`--gstout-audiopipe`**, `--gstout-buffer-duration`, `--mime-filter` |
+| DSD             | impossible - no decoder in GStreamer 1.8.3     | **DSD128 over DoP, 5.6448 MHz**                                            |
+| frame delivery  | -0.33%, feedback loop broken                   | **0.00%, loop stable**                                                     |
+| ALSA card index | `hw:1,0`                                       | `hw:0,0` - no onboard codec holds index 0                                  |
 
 The summary at the top of this file opens by praising the industrial eMMC for
 eliminating "fragile MicroSD-card dependencies". The eMMC was the half that was
