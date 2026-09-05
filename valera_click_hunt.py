@@ -2,6 +2,30 @@
 # -*- coding: utf-8 -*-
 """valera_click_hunt.py - find what makes the bit-perfect stream click.
 
+SUPERSEDED 2026-09-05. Read this before trusting anything it prints.
+
+The fault this tool was written for turned out to be the kernel: the 2018
+factory image mishandles the DAC's asynchronous feedback, delivers 0.33% fewer
+frames than the device asks for, and starves its FIFO on a schedule. Nothing
+this tool measures could have shown that, and four conclusions drawn with it -
+FLAC, the HID interface, the bus bandwidth ceiling, the endpoint reservation -
+were all wrong and are documented as withdrawn in the README.
+
+The problem is the method, not the code. Marking clicks by ear gives a
+per-minute count that ranged from 0 to 31 on an unchanged system, and a spread
+that wide will confirm whatever you already believe. Three of its own
+instruments also produced false positives: the tone generator clicked by
+itself, the verdict column mislabelled chance as proof on every interrupted
+run, and the network class correlated with clicks because the marker keystroke
+IS the network traffic.
+
+Use valera_rate_check.py instead. It compares the frames the host delivers
+against the rate the device requests, runs on silence, needs no ears, and
+answers in forty five seconds. Reach for this tool only for what it is
+genuinely good at: attributing a fault you have ALREADY confirmed by
+measurement to a specific layer.
+
+
 Run this ON THE BOARD, as root, WHILE SOUND IS PLAYING - either through
 gmediarender or through a bare `speaker-test -D hw:1,0`. It watches three
 layers at once and prints one timeline:

@@ -370,6 +370,12 @@ nano valera_deploy.py
 
 *(Paste the updated Python code into the file and save via Ctrl+O, Enter, Ctrl+X)*
 
+The script detects the card index itself rather than assuming one. That matters
+more than it sounds: there is no onboard codec here, so the USB DAC takes
+whatever index is free - `1` on the factory eMMC image, `0` on a current one -
+and a hardcoded index does not fail loudly, the renderer simply never opens the
+device.
+
 2. **Grant execution permissions:**
 
 ```bash
@@ -513,6 +519,47 @@ sudo systemctl reset-failed gmediarender
 sudo systemctl stop gmediarender
 
 ```
+
+### Checking that the chain actually delivers
+
+`valera_rate_check.py` answers the one question every other measurement in this
+file turned out to depend on: **does the host send the frames the DAC is asking
+for?** In asynchronous USB audio the device owns the clock and requests a rate
+through its feedback endpoint. If the host does not follow, the DAC FIFO drains
+at the difference and breaks up on a schedule - buffer depth divided by the
+deficit is the interval between audible faults.
+
+```bash
+sudo ./valera_rate_check.py
+
+```
+
+    card 0 (AUDIO), format S32_LE
+    device advertises: 44100, 48000, 88200, 96000, 176400, 192000, 352800, ...
+    45 s per rate, silence - nothing comes out of the speakers
+
+         rate   delivered     ratio           DAC asked verdict
+        44100       44100    1.0000        44100..44101 OK
+
+It finds the card, picks the widest format the device takes and reads the rate
+list out of the descriptor, so nothing is hardcoded. `--sweep` walks every rate
+the DAC advertises; `-s` sets the seconds per rate. The source is `/dev/zero`,
+so it can run while the amplifier is at listening volume without a sound coming
+out - which also means it can be run on a system nobody is sitting at.
+
+Read the output like this:
+
+| what you see | what it means |
+|:--|:--|
+| ratio `1.0000`, device asking its nominal rate | the chain works |
+| ratio near 1, device **`PEGGED`** at some other value | the feedback loop is not closing - the host sends at its own rate and ignores the request |
+| ratio well below 1, and the same fraction at every rate | a driver defect. Saturation produces scatter and xruns, not a clean 5/6 |
+| `XRUN` in the verdict | the pipeline missed its deadline - that one is above ALSA |
+
+This is the tool that ended a two-day search in forty five seconds, after the
+ear-and-stopwatch method had produced four confident and wrong answers. Prefer
+it to `valera_click_hunt.py`, which is kept for the record and carries a notice
+saying so.
 
 ### Hunting a Periodic Click
 
