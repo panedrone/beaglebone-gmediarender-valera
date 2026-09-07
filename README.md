@@ -220,7 +220,8 @@ cat /proc/asound/card1/stream0
 
 > **Hardware ceiling - read this before tuning anything upstream.** *(2026-09-05: this describes the
 > Topping MX3s. A different DAC on the same board reports `S32_LE` only, with a native DSD altsetting
-> and rates to 768 kHz - so read your own `stream0` rather than assuming these numbers.)* The DAC
+> and rates to 768 kHz - see *A second endpoint: SMSL RAW-HA1* below, and read your own `stream0`
+> rather than assuming these numbers.)* The DAC
 > exposes exactly two formats,
 > `S16_LE` and `S24_3LE`, and tops out at 192 kHz. There is no 32-bit altsetting and no DSD altsetting on this
 > device. Feeding it 32-bit or DSD unlocks nothing; it only guarantees a conversion somewhere earlier in the
@@ -283,6 +284,107 @@ a=$(awk '/eth0:/{print $2}' /proc/net/dev); sleep 8; b=$(awk '/eth0:/{print $2}'
 > removes the decoder and keeps all 24 bits - identical `format`, identical altset, identical packet
 > size, minus the clicks. See the foobar2000 section below for the full comparison, and the click
 > hunt section for how everything else in the chain was eliminated first.
+
+### A second endpoint: SMSL RAW-HA1
+
+![SMSL RAW-HA1](img/smsl_raw-ha1.png)
+
+Worth documenting alongside the MX3s, because the two are different classes of
+device and the board treats them differently. This one carries a **Thesycon/XMOS
+bridge, `152a:85dd`**, against the MX3s's Savitech `262a:196f`. On kernel 5.10
+`stream0` describes it in far more detail than the factory kernel ever did:
+
+```bash
+cat /proc/asound/card1/stream0
+
+```
+
+    SMSL SMSL USB AUDIO at usb-musb-hdrc.1-1, high speed : USB Audio
+
+    Playback:
+      Interface 1
+        Altset 1
+        Format: S32_LE
+        Rates: 44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000, 705600, 768000
+        Bits: 32
+        Endpoint: 0x01 (1 OUT) (ASYNC)
+        Sync Endpoint: 0x81 (1 IN)
+        Implicit Feedback Mode: No
+        Data packet interval: 125 us
+      Interface 1
+        Altset 2
+        Format: S32_LE
+        Bits: 24
+      Interface 1
+        Altset 3
+        Format: SPECIAL DSD_U32_BE
+        Bits: 32
+        DSD raw: DOP=0, bitrev=0
+
+Three things there are worth reading carefully. `Sync Endpoint: 0x81` is the
+feedback endpoint stated explicitly - the factory kernel only ever printed
+`Feedback Format = 16.16` and left the rest implicit. Altset 2 reports **24 bits
+inside a 32-bit slot**, which is why ALSA offers only `S32_LE` in both. And
+altset 3 is **native DSD**, which this DAC has in hardware.
+
+Against the MX3s, from `lsusb -v`:
+
+| | Topping MX3s | SMSL RAW-HA1 |
+|:--|:--|:--|
+| bridge | Savitech `262a:196f` | Thesycon/XMOS `152a:85dd` |
+| formats ALSA sees | `S16_LE`, `S24_3LE` | `S32_LE` only |
+| `bSubslotSize` | 2 or 3 bytes | **4 bytes in every altsetting** |
+| bits carried | 16 / 24 | 24 or 32 in a 32-bit slot |
+| top rate | 192 kHz | **768 kHz** |
+| DSD | none | **native, `DSD_U32_BE`** |
+| `wMaxPacketSize` | 104 / 156 bytes | **776 bytes** |
+| volume control on the host | `PCM Playback Volume`, 16 steps | none at all |
+
+The last row matters in practice. The MX3s exposes a mixer element, and a fresh
+`alsa-utils` install found it at **8 of 15, which is -21 dB** - quiet enough to
+send anyone hunting through the amplifier before thinking to check `amixer`. The
+RAW-HA1 exposes nothing, so there is no digital attenuation to get wrong:
+
+```bash
+amixer -c 1 sget PCM
+
+```
+
+The 776-byte packet is the device declaring what it needs at 768 kHz, and the
+host reserves that whether or not it is used. On the factory kernel this looked
+like the reason the more capable DAC behaved worse; on 5.10 both run at ratio
+1.0000 and the reservation costs nothing.
+
+#### DSD without a DSD decoder
+
+The DAC's native DSD altsetting has never been reached from any source here.
+What does work is **DoP**, and DoP is not DSD as far as this board is concerned:
+it is 24-bit PCM at 352.8 kHz with a marker in the top byte, which the DAC
+recognises and unwraps. GStreamer carries it without knowing what it is, which
+is why DSD128 plays on the factory image whose GStreamer 1.8.3 has no DSD
+decoder at all.
+
+Playing a DSF, the amplifier's display reads `DoP  5.6448 MHz` and the board
+reports:
+
+    rate        352800 Hz, S32_LE, period 3528 / buffer 70560
+    Momentary freq = 352800 Hz (0x2c.1998)
+    delivered   352775 frames/s   ->  -69 ppm
+    USB         2 822 400 bytes/s
+    network     2 986 000 bytes/s from foobar2000
+
+That is eight times the data rate of CD and it arrives intact. Two cautions.
+DoP costs exactly twice the bandwidth of native DSD, since every DSD bit rides
+inside a PCM frame with the marker overhead. And DoP is fragile in a way plain
+PCM is not: the marker pattern is what identifies the stream, so a single
+corrupted sample makes the DAC lose sync, and a DAC that loses sync either mutes
+or plays the bits as PCM - a full-scale noise burst. Any software volume applied
+anywhere in the chain destroys the markers outright, so the renderer must be at
+100 and nothing may resample.
+
+Whether the player sends DoP or converts DSD to PCM itself is decided on the PC.
+Both work here; `hw_params` says which is happening - `352800` for DoP, `44100`
+for a conversion.
 
 ### Industrial Storage Health (eMMC)
 
