@@ -8,7 +8,7 @@ esoteric cables or uncontrolled sample-rate conversions).
 
 |                  Embedded Board                   |                  UPnP Renderer                  |                         Media App                         |
 |:-------------------------------------------------:|:-----------------------------------------------:|:---------------------------------------------------------:|
-| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![BeagleBone-UPnP.png](img/BeagleBone-UPnP.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) |
+| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![BeagleBone-UPnP.png](img/BeagleBone_UPnP.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) |
 
 |          Valera Jr.           |                  htop                   |          An absolute bit-perfect, bare-metal pass-through!          |
 |:-----------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
