@@ -10,9 +10,9 @@ esoteric cables or uncontrolled sample-rate conversions).
 |:-------------------------------------------------:|:-----------------------------------------------:|:---------------------------------------------------------:|
 | ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![BeagleBone-UPnP.png](img/BeagleBone-UPnP.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) |
 
-|                           Endpoint                            |                  htop                   |          An absolute bit-perfect, bare-metal pass-through!          |
-|:-------------------------------------------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
-| ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
+|          Valera Jr.           |                  htop                   |          An absolute bit-perfect, bare-metal pass-through!          |
+|:-----------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
+| ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
 
 ## Bypassing the Mixer: The Actual Signal Path
 
