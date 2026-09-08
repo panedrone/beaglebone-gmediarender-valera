@@ -386,26 +386,6 @@ Whether the player sends DoP or converts DSD to PCM itself is decided on the PC.
 Both work here; `hw_params` says which is happening - `352800` for DoP, `44100`
 for a conversion.
 
-### Industrial Storage Health (eMMC)
-
-Monitor the physical integrity of the boot medium acquired from local sources.
-
-* **Check available disk space and partition table mapping:**
-
-```bash
-df -h
-
-```
-
-    Filesystem      Size  Used Avail Use% Mounted on
-    udev            215M     0  215M   0% /dev
-    tmpfs            49M  5.3M   44M  11% /run
-    /dev/mmcblk1p1  3.5G  3.1G  230M  94% /
-    tmpfs           242M     0  242M   0% /dev/shm
-    tmpfs           5.0M  4.0K  5.0M   1% /run/lock
-    tmpfs           242M     0  242M   0% /sys/fs/cgroup
-    tmpfs            49M     0   49M   0% /run/user/0
-
 #### Stop the daily writes that buy nothing
 
 Stretch is end-of-life, so the only entry in `sources.list` points at `archive.debian.org` - a frozen
