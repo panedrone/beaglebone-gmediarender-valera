@@ -14,23 +14,6 @@ esoteric cables or uncontrolled sample-rate conversions).
 |:-----------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
 | ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
 
-### Key Steps & Engineering Solutions:
-
-1. **Base Image & Internal Memory Storage:** Built on a standard, field-tested **Debian** distribution deployed directly
-   onto the industrial onboard eMMC flash memory, completely eliminating fragile MicroSD-card dependencies and
-   contact-wear jitter. **(2026-09-05: the eMMC was the right choice, its 2018 kernel was not. The
-   factory kernel mishandles asynchronous USB feedback; the eMMC now runs 5.10 with the factory
-   userland intact. See *The factory kernel is the reason this board burbles*.)**
-2. **Hardware Binding (Direct to `hw:1,0`):** The UPnP/DLNA stream is delivered via GStreamer
-   (`-o gst --gstout-audiosink=alsasink`) onto the raw hardware device, routed there by `/etc/asound.conf`,
-   with ALSA's `dmix` software mixer out of the path entirely.
-3. **Lifting Digital Constraints:** The renderer runs at volume 100 (0 dB), where `playbin`'s volume element sits in
-   passthrough and touches no samples. This is the daemon's own default - there is no launch flag in `ExecStart`,
-   and it needs none. What matters is that the control point never moves the slider (see the check below).
-4. **Power Supply:** Powered from a PC USB port, I could hear the PC. Anything that gets the board off that rail
-   fixes it - a powerbank, a USB socket on a mains filter, even a phone charger. A linear supply (~$50) is the
-   ideal, but not a prerequisite.
-
 ## Accessing the Board
 
 Connect power and log into the stable onboard eMMC environment via SSH:
@@ -42,31 +25,7 @@ ssh root@beaglebone.local
 
 *(Direct root access is enabled; default password is `temppwd` if not changed).*
 
-## Configure Onboard Linux
-
-The board ships with a factory **Debian** image pre-installed on eMMC. Check the running version immediately after first
-login:
-
-```bash
-cat /etc/os-release
-
-```
-
-    PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
-    NAME="Debian GNU/Linux"
-    VERSION_ID="9"
-    VERSION="9 (stretch)"
-    ID=debian
-    HOME_URL="https://www.debian.org/"
-    SUPPORT_URL="https://www.debian.org/support"
-    BUG_REPORT_URL="https://bugs.debian.org/"
-    root@beaglebone:~# 
-
-The factory image includes a built-in Node.js stack and a local documentation server — accessible in the LAN at
-[http://beaglebone.local](http://beaglebone.local) while the board is powered. Useful for pinout references and
-peripheral programming docs without going online.
-
-### Bypassing the Mixer: The Actual Signal Path
+## Bypassing the Mixer: The Actual Signal Path
 
 The critical configuration step is routing the audio stream directly to the hardware device, bypassing ALSA's
 software mixer (`dmix`) entirely. The `hw:1,0` designator locks the stream to the raw kernel DMA buffer - no
@@ -145,7 +104,7 @@ up the default device from there — no device hardcoded in the flags, no dmix i
 
 Any `plughw:` or `default:` in `/etc/asound.conf` silently re-enables dmix and destroys bit-perfect integrity.
 
-### Low-Level Hardware & ALSA Diagnostics
+## Low-Level Hardware & ALSA Diagnostics
 
 Verify that the bit-perfect stream reaches the physical layer without resampling or software mixing.
 
@@ -285,7 +244,7 @@ a=$(awk '/eth0:/{print $2}' /proc/net/dev); sleep 8; b=$(awk '/eth0:/{print $2}'
 > size, minus the clicks. See the foobar2000 section below for the full comparison, and the click
 > hunt section for how everything else in the chain was eliminated first.
 
-### A second endpoint: SMSL RAW-HA1
+## A second endpoint: SMSL RAW-HA1
 
 ![SMSL RAW-HA1](img/smsl_raw-ha1.png)
 
@@ -355,7 +314,7 @@ host reserves that whether or not it is used. On the factory kernel this looked
 like the reason the more capable DAC behaved worse; on 5.10 both run at ratio
 1.0000 and the reservation costs nothing.
 
-#### DSD without a DSD decoder
+### DSD without a DSD decoder
 
 The DAC's native DSD altsetting has never been reached from any source here.
 What does work is **DoP**, and DoP is not DSD as far as this board is concerned:
@@ -386,7 +345,7 @@ Whether the player sends DoP or converts DSD to PCM itself is decided on the PC.
 Both work here; `hw_params` says which is happening - `352800` for DoP, `44100`
 for a conversion.
 
-#### Stop the daily writes that buy nothing
+### Stop the daily writes that buy nothing
 
 Stretch is end-of-life, so the only entry in `sources.list` points at `archive.debian.org` - a frozen
 archive whose contents will never change again. Yet `apt-daily.timer` and `apt-daily-upgrade.timer`
@@ -535,6 +494,9 @@ chain.
 
 * **24/7 eMMC Operation:** This is an industrial embedded setup using solid internal flash. Power consumption is < 2W in
   peak. It is designed to run continuously without reboots.
+* **Do Not Power It From the PC:** on a PC USB port I could hear the PC. Anything that gets the board off that
+  rail fixes it - a powerbank, a USB socket on a mains filter, even a phone charger. A linear supply (~$50) is
+  the ideal, but not a prerequisite.
 * **If Running Off a Powerbank:** Pick one with a "low-current/always-on" mode, otherwise it goes to sleep on the
   board's low draw and cuts power during track changes.
 * **Graceful Power Off:** Never pull the live power cord. Press the physical **POWER** button on the BeagleBone board
@@ -645,6 +607,31 @@ it to `valera_click_hunt.py`, which is kept for the record and carries a notice
 saying so.
 
 ### The factory kernel is the reason this board burbles
+
+**What the board ships with.** A factory Debian image pre-installed on eMMC. It
+is worth knowing exactly how old it is before trusting anything on it, so this is
+the first command to run after logging in:
+
+```bash
+cat /etc/os-release
+
+```
+
+    PRETTY_NAME="Debian GNU/Linux 9 (stretch)"
+    NAME="Debian GNU/Linux"
+    VERSION_ID="9"
+    VERSION="9 (stretch)"
+    ID=debian
+    HOME_URL="https://www.debian.org/"
+    SUPPORT_URL="https://www.debian.org/support"
+    BUG_REPORT_URL="https://bugs.debian.org/"
+    root@beaglebone:~# 
+
+Stretch, end-of-life, with `4.9.78-ti-r94` under it. The userland is genuinely
+worth keeping - it carries a Node.js stack and a local documentation server on
+[http://beaglebone.local](http://beaglebone.local) while the board is powered,
+useful for pinout references and peripheral programming docs without going
+online. The kernel is not.
 
 The image the board ships with is unusable for USB audio, and the fault is in
 `4.9.78-ti-r94` specifically - not in the hardware, the power supply, the cable,
