@@ -14,17 +14,6 @@ esoteric cables or uncontrolled sample-rate conversions).
 |:-----------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
 | ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
 
-## Accessing the Board
-
-Connect power and log into the stable onboard eMMC environment via SSH:
-
-```bash
-ssh root@beaglebone.local
-
-```
-
-*(Direct root access is enabled; default password is `temppwd` if not changed).*
-
 ## Bypassing the Mixer: The Actual Signal Path
 
 The critical configuration step is routing the audio stream directly to the hardware device, bypassing ALSA's
@@ -103,6 +92,51 @@ And the global ALSA routing in `/etc/asound.conf` which maps `pcm.!default` to `
 up the default device from there — no device hardcoded in the flags, no dmix in the path.
 
 Any `plughw:` or `default:` in `/etc/asound.conf` silently re-enables dmix and destroys bit-perfect integrity.
+
+## Accessing the Board
+
+Connect power and log into the stable onboard eMMC environment via SSH:
+
+```bash
+ssh root@beaglebone.local
+
+```
+
+*(Direct root access is enabled; default password is `temppwd` if not changed).*
+
+## Installation & Deployment
+
+1. **Create the deployment script** on your BeagleBone:
+
+```bash
+nano valera_deploy.py
+
+```
+
+*(Paste the updated Python code into the file and save via Ctrl+O, Enter, Ctrl+X)*
+
+The script detects the card index itself rather than assuming one. That matters
+more than it sounds: there is no onboard codec here, so the USB DAC takes
+whatever index is free - `1` on the factory eMMC image, `0` on a current one -
+and a hardcoded index does not fail loudly, the renderer simply never opens the
+device.
+
+2. **Grant execution permissions:**
+
+```bash
+chmod +x valera_deploy.py
+
+```
+
+3. **Execute the automation pipeline:**
+
+```bash
+sudo ./valera_deploy.py
+
+```
+
+When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
+unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
 
 ## Low-Level Hardware & ALSA Diagnostics
 
@@ -399,40 +433,6 @@ htop
 ```
 
 *(Install via `sudo apt install htop` if missing).*
-
-## Installation & Deployment
-
-1. **Create the deployment script** on your BeagleBone:
-
-```bash
-nano valera_deploy.py
-
-```
-
-*(Paste the updated Python code into the file and save via Ctrl+O, Enter, Ctrl+X)*
-
-The script detects the card index itself rather than assuming one. That matters
-more than it sounds: there is no onboard codec here, so the USB DAC takes
-whatever index is free - `1` on the factory eMMC image, `0` on a current one -
-and a hardcoded index does not fail loudly, the renderer simply never opens the
-device.
-
-2. **Grant execution permissions:**
-
-```bash
-chmod +x valera_deploy.py
-
-```
-
-3. **Execute the automation pipeline:**
-
-```bash
-sudo ./valera_deploy.py
-
-```
-
-When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
-unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
 
 ## Configure foobar2000 on Windows 11
 
