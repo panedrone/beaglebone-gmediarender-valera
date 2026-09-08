@@ -1,6 +1,4 @@
-# beaglebone-gmediarender-valera
-
-## Summary: Engineer's Log (Valera Jr. Bare-Metal Streamer)
+## Engineer's Log about Valera Jr. Bare-Metal Streamer
 
 An uncompromising audiophile streamer based on BeagleBone Green.
 The architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
