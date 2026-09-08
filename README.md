@@ -278,6 +278,15 @@ a=$(awk '/eth0:/{print $2}' /proc/net/dev); sleep 8; b=$(awk '/eth0:/{print $2}'
 > size, minus the clicks. See the foobar2000 section below for the full comparison, and the click
 > hunt section for how everything else in the chain was eliminated first.
 
+* **Inspect free RAM and system load average (ensuring < 0.1 during playback):**
+
+```bash
+htop
+
+```
+
+*(Install via `sudo apt install htop` if missing).*
+
 ## A second endpoint: SMSL RAW-HA1
 
 ![SMSL RAW-HA1](img/smsl_raw-ha1.png)
@@ -378,61 +387,6 @@ anywhere in the chain destroys the markers outright, so the renderer must be at
 Whether the player sends DoP or converts DSD to PCM itself is decided on the PC.
 Both work here; `hw_params` says which is happening - `352800` for DoP, `44100`
 for a conversion.
-
-### Stop the daily writes that buy nothing
-
-Stretch is end-of-life, so the only entry in `sources.list` points at `archive.debian.org` - a frozen
-archive whose contents will never change again. Yet `apt-daily.timer` and `apt-daily-upgrade.timer`
-ship enabled, and every day they re-download ~28 MB of package lists and rebuild ~46 MB of binary
-caches from that immutable archive.
-
-On a board praised for its industrial eMMC and month-long uptimes, that is a daily rewrite of 74 MB of
-flash for exactly nothing - plus a daily burst of network and disk activity on a machine whose timing
-we care about enough to have hunted a click through it.
-
-```bash
-sudo systemctl disable --now apt-daily.timer apt-daily-upgrade.timer
-
-```
-
-Then clear what they already accumulated, once:
-
-```bash
-sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
-
-```
-
-That returned 74 MB here, taking the root filesystem from 97% to 95% full. `apt-get install` will
-refuse to work until you run `apt-get update` yourself - which is the point: the lists come back when
-you actually need them, not every morning. Re-enable the timers with `systemctl enable` if you ever
-want the old behaviour back.
-
-A further ~69 MB sits in `/opt/source`, which belongs to no package at all - it is a set of git
-checkouts the factory image ships. Device trees for kernels that are not installed (this board runs
-4.9.78) and `BBBlfs`, a USB boot utility with no role here:
-
-```bash
-sudo rm -rf /opt/source/BBBlfs /opt/source/dtb-4.4-ti /opt/source/dtb-4.14-ti
-
-```
-
-All three are plain git clones and come back with a `git clone` if ever wanted. **Leave
-`/opt/source/bb.org-overlays` alone** - the device tree overlays that strip the onboard audio codec
-depend on it.
-
-Beyond that the factory image still carries a browser, an IDE, a desktop icon set and an OpenCL SDK
-for a different SoC - well over a gigabyte. Removing those means removing packages, and on an archived
-distribution that is close to irreversible, so it is left as a deliberate decision rather than a
-recipe.
-
-* **Inspect free RAM and system load average (ensuring < 0.1 during playback):**
-
-```bash
-htop
-
-```
-
-*(Install via `sudo apt install htop` if missing).*
 
 ## Configure foobar2000 on Windows 11
 
