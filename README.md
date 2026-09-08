@@ -6,13 +6,13 @@ An uncompromising audiophile streamer based on BeagleBone Green.
 The architecture entirely eliminates proprietary shells, redundant software conversions, and marketing crutches (such as
 esoteric cables or uncontrolled sample-rate conversions).
 
-|                 1. Embedded Board                 |                       2. Media App                        |                          3. Endpoint                          |
-|:-------------------------------------------------:|:---------------------------------------------------------:|:-------------------------------------------------------------:|
-| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) | ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) |
+|                  Embedded Board                   |                  UPnP Renderer                  |                         Media App                         |
+|:-------------------------------------------------:|:-----------------------------------------------:|:---------------------------------------------------------:|
+| ![BeagleBone-Green.png](img/BeagleBone-Green.png) | ![BeagleBone-UPnP.png](img/BeagleBone-UPnP.png) | ![valera-in-foobar2000.png](img/valera-in-foobar2000.png) |
 
-|          Valera-MIPS          |                  htop                   |          an absolute bit-perfect, bare-metal pass-through!          |
-|:-----------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
-| ![mascot.png](img/mascot.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
+|                           Endpoint                            |                  htop                   |          An absolute bit-perfect, bare-metal pass-through!          |
+|:-------------------------------------------------------------:|:---------------------------------------:|:-------------------------------------------------------------------:|
+| ![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png) | ![valera-htop.png](img/valera-htop.png) | ![photo_2026-06-24_23-09-03.jpg](img/photo_2026-06-24_23-09-03.jpg) |
 
 ## Bypassing the Mixer: The Actual Signal Path
 
@@ -137,6 +137,95 @@ sudo ./valera_deploy.py
 
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
 unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
+
+## Network & End-Point Visibility
+
+Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
+
+* **Check active network sockets and port binding:**
+
+```bash
+sudo ss -tulpn | grep gmediarender
+
+```
+
+    udp UNCONN 0 0 *:1900              users:(("gmediarender",pid=1199,fd=76))
+    tcp LISTEN 0 128 192.168.0.105:49494 users:(("gmediarender",pid=1199,fd=72))
+
+No port is pinned in `ExecStart`, so libupnp picks one out of `[49152..65535]` at start and it can differ
+after a restart. `1900/udp` is SSDP and is fixed. Read the TCP port out of this listing rather than
+assuming a number.
+
+* **Verify the renderer is still at volume 100 - the actual bit-perfect invariant:**
+
+The daemon starts at 0 dB by itself, but a control point can move the slider at any time, and the moment
+it does, `playbin`'s volume element leaves passthrough and starts scaling samples in software. No launch
+flag can prevent that; the only honest check is to ask the running renderer. Substitute the port from the
+listing above:
+
+```bash
+curl -s -X POST http://192.168.0.105:49494/upnp/control/rendercontrol1 -H 'Content-Type: text/xml; charset="utf-8"' -H 'SOAPACTION: "urn:schemas-upnp-org:service:RenderingControl:1#GetVolume"' -d '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume></s:Body></s:Envelope>'
+
+```
+
+    <CurrentVolume>100</CurrentVolume>
+
+Anything below 100 means the stream is being attenuated on this board. The control URL comes from
+`gmediarender --dump-devicedesc`.
+
+> **There is no `--initial-volume` flag in this build.** The volume option this version of
+> gmrender-resurrect actually offers is `--gstout-initial-volume-db` (`0.0` = max, `-6` = half), listed
+> under `gmediarender --help-gstout`. Since 0 dB is already the default, adding it changes nothing - and
+> adding the non-existent spelling would stop the daemon from starting at all, because glib's option
+> parser rejects unknown options outright. Check `--help-all` before putting any flag in the unit.
+
+### The volume slider is the one hole in the bit-perfect claim
+
+Worth stating plainly, because it is a mouse wheel away and nothing in the chain warns about it.
+foobar2000's volume control is wired straight to this renderer: `foo_out_upnp.dll` carries
+`UPnP Volume Control`, `SetVolume`, `SetMute`, `VolumeMin`/`VolumeMax` and subscribes to
+`urn:schemas-upnp-org:service:RenderingControl:*`. Moving that slider sends SOAP to the board,
+gmediarender puts the value on `playbin`'s `volume` property, and every sample gets multiplied in
+floating point. Everything else documented here - `hw:1,0`, no dmix, WAV over FLAC, matching altset -
+is undone by that one control.
+
+**It cannot be switched off from either side.**
+
+* On the board: `gmediarender --help-all` lists every option this build has. RenderingControl is
+  compiled in and there is no flag to suppress it.
+* In foobar2000: the complete set of keys `foo_out_upnp.dll` recognises is `stream-title`,
+  `preferred-format`, `forced-format`, `bitdepth-max`, `supports-FLAC`, `supports-WAV`,
+  `supports-LPCM`, `supports-pause`, `supports-chunked`, `supports-infinite-length`,
+  `zero-length-WAV`, `send-accept-ranges`, `accept-ranges`, `reports-time`. There is no volume key
+  in any spelling.
+
+So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the MX3s
+itself**, where the control is analog and downstream of the DAC. The state lives only in the running
+daemon's memory, so `systemctl restart gmediarender` unconditionally returns it to 100.
+
+The MX3s does also expose a digital volume of its own over USB Audio Class, separate from UPnP and
+untouched by foobar2000:
+
+```bash
+amixer -c 1 sget PCM
+
+```
+
+    Simple mixer control 'PCM',0
+      Capabilities: pvolume pswitch pswitch-joined
+      Limits: Playback 0 - 15
+      Front Left: Playback 15 [100%] [0.00dB] [on]
+
+Confirm it reads `[0.00dB]` - that is the Savitech bridge not attenuating. It is worth checking once
+and then leaving alone: sixteen steps across the whole range is a mute switch with pretensions, not a
+volume control.
+
+* **Ping the board locally to verify zero-latency connection:**
+
+```bash
+ping -c 4 beaglebone.local
+
+```
 
 ## Low-Level Hardware & ALSA Diagnostics
 
@@ -331,16 +420,16 @@ altset 3 is **native DSD**, which this DAC has in hardware.
 
 Against the MX3s, from `lsusb -v`:
 
-| | Topping MX3s | SMSL RAW-HA1 |
-|:--|:--|:--|
-| bridge | Savitech `262a:196f` | Thesycon/XMOS `152a:85dd` |
-| formats ALSA sees | `S16_LE`, `S24_3LE` | `S32_LE` only |
-| `bSubslotSize` | 2 or 3 bytes | **4 bytes in every altsetting** |
-| bits carried | 16 / 24 | 24 or 32 in a 32-bit slot |
-| top rate | 192 kHz | **768 kHz** |
-| DSD | none | **native, `DSD_U32_BE`** |
-| `wMaxPacketSize` | 104 / 156 bytes | **776 bytes** |
-| volume control on the host | `PCM Playback Volume`, 16 steps | none at all |
+|                            | Topping MX3s                    | SMSL RAW-HA1                    |
+|:---------------------------|:--------------------------------|:--------------------------------|
+| bridge                     | Savitech `262a:196f`            | Thesycon/XMOS `152a:85dd`       |
+| formats ALSA sees          | `S16_LE`, `S24_3LE`             | `S32_LE` only                   |
+| `bSubslotSize`             | 2 or 3 bytes                    | **4 bytes in every altsetting** |
+| bits carried               | 16 / 24                         | 24 or 32 in a 32-bit slot       |
+| top rate                   | 192 kHz                         | **768 kHz**                     |
+| DSD                        | none                            | **native, `DSD_U32_BE`**        |
+| `wMaxPacketSize`           | 104 / 156 bytes                 | **776 bytes**                   |
+| volume control on the host | `PCM Playback Volume`, 16 steps | none at all                     |
 
 The last row matters in practice. The MX3s exposes a mixer element, and a fresh
 `alsa-utils` install found it at **8 of 15, which is -21 dB** - quiet enough to
@@ -488,7 +577,7 @@ sudo systemctl status gmediarender
        Active: active (running) since Thu 2026-06-25 22:45:59 UTC; 4h 27min ago
      Main PID: 1216 (gmediarender)
        CGroup: /system.slice/gmediarender.service
-               └─1216 /usr/bin/gmediarender -f BeagleBone Topping -o gst --gstout-audiosink=alsasink
+               └─1216 /usr/bin/gmediarender -f BeagleBone -o gst --gstout-audiosink=alsasink
     
     Jun 25 22:45:59 beaglebone systemd[1]: Started GMediaRender UPnP Renderer.
     Jun 25 22:46:00 beaglebone gmediarender[1216]: gmediarender 0.0.7-git started [ gmediarender 0.0.7-git (libupnp-1.6.19+git20160116; glib-2.49.6; gstreamer-1.8.3) ].
@@ -548,12 +637,12 @@ out - which also means it can be run on a system nobody is sitting at.
 
 Read the output like this:
 
-| what you see | what it means |
-|:--|:--|
-| ratio `1.0000`, device asking its nominal rate | the chain works |
-| ratio near 1, device **`PEGGED`** at some other value | the feedback loop is not closing - the host sends at its own rate and ignores the request |
-| ratio well below 1, and the same fraction at every rate | a driver defect. Saturation produces scatter and xruns, not a clean 5/6 |
-| `XRUN` in the verdict | the pipeline missed its deadline - that one is above ALSA |
+| what you see                                            | what it means                                                                             |
+|:--------------------------------------------------------|:------------------------------------------------------------------------------------------|
+| ratio `1.0000`, device asking its nominal rate          | the chain works                                                                           |
+| ratio near 1, device **`PEGGED`** at some other value   | the feedback loop is not closing - the host sends at its own rate and ignores the request |
+| ratio well below 1, and the same fraction at every rate | a driver defect. Saturation produces scatter and xruns, not a clean 5/6                   |
+| `XRUN` in the verdict                                   | the pipeline missed its deadline - that one is above ALSA                                 |
 
 This is the tool that ended a two-day search in forty five seconds, after the
 ear-and-stopwatch method had produced four confident and wrong answers. Prefer
@@ -608,11 +697,11 @@ that never closed.
 **The fix is `5.10.240-bone80`,** the last long-term kernel before the USB-audio
 endpoint rework that landed in 5.11:
 
-| | 4.9.78-ti-r94 | **5.10.240-bone80** | 6.18.39-bone44 |
-|:--|--:|--:|--:|
-| DAC asks | 44320 Hz | **44100 Hz** | 44100 Hz |
-| host delivers | 43956 Hz (-0.33%) | **44100 Hz (0.00%)** | 36807 Hz (-16.6%) |
-| by ear | burbles, in bursts | **clean** | constant distortion |
+|               |      4.9.78-ti-r94 |  **5.10.240-bone80** |      6.18.39-bone44 |
+|:--------------|-------------------:|---------------------:|--------------------:|
+| DAC asks      |           44320 Hz |         **44100 Hz** |            44100 Hz |
+| host delivers |  43956 Hz (-0.33%) | **44100 Hz (0.00%)** |   36807 Hz (-16.6%) |
+| by ear        | burbles, in bursts |            **clean** | constant distortion |
 
 > **Do not use a current kernel.** `6.18` delivers exactly five sixths of the
 > stream at every rate, on two different DACs, with an idle CPU, no xruns and
@@ -697,92 +786,3 @@ unchanged system, and every withdrawn conclusion above came from that method.
 And the instrument has to be checked before the system: `valera_click_hunt.py`
 was at one point producing about 35 clicks a minute by itself. It is kept in the
 repository with a notice saying so; `valera_rate_check.py` replaces it.
-
-### Network & End-Point Visibility
-
-Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
-
-* **Check active network sockets and port binding:**
-
-```bash
-sudo ss -tulpn | grep gmediarender
-
-```
-
-    udp UNCONN 0 0 *:1900              users:(("gmediarender",pid=1199,fd=76))
-    tcp LISTEN 0 128 192.168.0.105:49494 users:(("gmediarender",pid=1199,fd=72))
-
-No port is pinned in `ExecStart`, so libupnp picks one out of `[49152..65535]` at start and it can differ
-after a restart. `1900/udp` is SSDP and is fixed. Read the TCP port out of this listing rather than
-assuming a number.
-
-* **Verify the renderer is still at volume 100 - the actual bit-perfect invariant:**
-
-The daemon starts at 0 dB by itself, but a control point can move the slider at any time, and the moment
-it does, `playbin`'s volume element leaves passthrough and starts scaling samples in software. No launch
-flag can prevent that; the only honest check is to ask the running renderer. Substitute the port from the
-listing above:
-
-```bash
-curl -s -X POST http://192.168.0.105:49494/upnp/control/rendercontrol1 -H 'Content-Type: text/xml; charset="utf-8"' -H 'SOAPACTION: "urn:schemas-upnp-org:service:RenderingControl:1#GetVolume"' -d '<?xml version="1.0"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/"><s:Body><u:GetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1"><InstanceID>0</InstanceID><Channel>Master</Channel></u:GetVolume></s:Body></s:Envelope>'
-
-```
-
-    <CurrentVolume>100</CurrentVolume>
-
-Anything below 100 means the stream is being attenuated on this board. The control URL comes from
-`gmediarender --dump-devicedesc`.
-
-> **There is no `--initial-volume` flag in this build.** The volume option this version of
-> gmrender-resurrect actually offers is `--gstout-initial-volume-db` (`0.0` = max, `-6` = half), listed
-> under `gmediarender --help-gstout`. Since 0 dB is already the default, adding it changes nothing - and
-> adding the non-existent spelling would stop the daemon from starting at all, because glib's option
-> parser rejects unknown options outright. Check `--help-all` before putting any flag in the unit.
-
-#### The volume slider is the one hole in the bit-perfect claim
-
-Worth stating plainly, because it is a mouse wheel away and nothing in the chain warns about it.
-foobar2000's volume control is wired straight to this renderer: `foo_out_upnp.dll` carries
-`UPnP Volume Control`, `SetVolume`, `SetMute`, `VolumeMin`/`VolumeMax` and subscribes to
-`urn:schemas-upnp-org:service:RenderingControl:*`. Moving that slider sends SOAP to the board,
-gmediarender puts the value on `playbin`'s `volume` property, and every sample gets multiplied in
-floating point. Everything else documented here - `hw:1,0`, no dmix, WAV over FLAC, matching altset -
-is undone by that one control.
-
-**It cannot be switched off from either side.**
-
-* On the board: `gmediarender --help-all` lists every option this build has. RenderingControl is
-  compiled in and there is no flag to suppress it.
-* In foobar2000: the complete set of keys `foo_out_upnp.dll` recognises is `stream-title`,
-  `preferred-format`, `forced-format`, `bitdepth-max`, `supports-FLAC`, `supports-WAV`,
-  `supports-LPCM`, `supports-pause`, `supports-chunked`, `supports-infinite-length`,
-  `zero-length-WAV`, `send-accept-ranges`, `accept-ranges`, `reports-time`. There is no volume key
-  in any spelling.
-
-So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the MX3s
-itself**, where the control is analog and downstream of the DAC. The state lives only in the running
-daemon's memory, so `systemctl restart gmediarender` unconditionally returns it to 100.
-
-The MX3s does also expose a digital volume of its own over USB Audio Class, separate from UPnP and
-untouched by foobar2000:
-
-```bash
-amixer -c 1 sget PCM
-
-```
-
-    Simple mixer control 'PCM',0
-      Capabilities: pvolume pswitch pswitch-joined
-      Limits: Playback 0 - 15
-      Front Left: Playback 15 [100%] [0.00dB] [on]
-
-Confirm it reads `[0.00dB]` - that is the Savitech bridge not attenuating. It is worth checking once
-and then leaving alone: sixteen steps across the whole range is a mute switch with pretensions, not a
-volume control.
-
-* **Ping the board locally to verify zero-latency connection:**
-
-```bash
-ping -c 4 beaglebone.local
-
-```

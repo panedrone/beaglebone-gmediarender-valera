@@ -28,7 +28,7 @@ import time
 UNIT_PATH = "/etc/systemd/system/gmediarender.service"
 LEGACY_UNIT = "/lib/systemd/system/gmediarender.service"
 LEGACY_DROPIN = "/etc/systemd/system/gmediarender.service.d"
-FRIENDLY_NAME = "BeagleBone SD"
+FRIENDLY_NAME = "BeagleBone"
 
 
 def run(args, **kw):
