@@ -749,38 +749,3 @@ Debian 9 with a kernel six years newer is an odd pairing and it works - the
 kernel/userspace ABI is stable and systemd 232 does not object. The old kernel
 stays installed, so rolling back is one line.
 
-**Making room.** The eMMC ships 96% full. Removing the browser, the CJK fonts,
-an OpenCL SDK for a different SoC, Intel wireless firmware, an icon theme and
-the Python and ICU build headers frees 637 MB and takes it to 77%. Keep
-`bone101` - that is the documentation site itself - along with `nodejs`,
-`bb-node-red-installer`, `bonescript`, `apache2`, and the old kernel.
-
-> Leave `libgl1-mesa-dri` alone despite its 95 MB. Simulating that removal first
-> shows it takes `gstreamer1.0-plugins-bad` with it, because the bad plugin set
-> links against GL, and on an archived distribution there is no getting decoders
-> back. Run `apt-get remove --purge -s` before every removal here and read what
-> the cascade takes, not the package you named.
-
-### Conclusions this file used to draw, and withdrew
-
-Everything attributed while the factory kernel was underneath turned out to be
-an artefact of it. Listed because each looked convincing, and because the
-sections that argued for them are still below:
-
-* **FLAC** was blamed for a periodic click. On 5.10 the same 24-bit FLAC stream
-  plays clean. Changing the format changed the bitrate, and a bursty fault
-  obliged by staying quiet for a while.
-* **The DAC's HID interface** appeared to cause it. It did not replicate on a
-  second DAC and is irrelevant on 5.10.
-* **Bus bandwidth.** This board was declared incapable of hi-res and saturating
-  near 400 KB/s. It carries 2.8 MB/s.
-* **The endpoint's 776-byte reservation, the power supply, the USB cable, the
-  ALSA route, the buffer geometry, the device tree overlays.** All eliminated by
-  direct experiment; `/boot/uEnv.txt` had never been modified at all.
-
-Two things are worth keeping from that. A fault arriving in bursts cannot be
-judged by ear over five minutes - the per-minute count ranged from 0 to 31 on an
-unchanged system, and every withdrawn conclusion above came from that method.
-And the instrument has to be checked before the system: `valera_click_hunt.py`
-was at one point producing about 35 clicks a minute by itself. It is kept in the
-repository with a notice saying so; `valera_rate_check.py` replaces it.
