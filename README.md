@@ -36,8 +36,8 @@ flowchart LR
         GMR["<b>GMediaRender</b><br/>systemd daemon,<br/>autostart"]
         ALSA["<b>ALSA hw:1,0</b><br/>dmix BYPASSED"]
         MUSB["<b>MUSB + DMA</b><br/><b>(AM335x)</b><br/>high speed,<br/>125 us microframes"]
-        GMR -- "playbin &rarr; alsasink" --> ALSA
-        ALSA -- "snd-usb-audio:<br/>PCM &rarr; isoch. URBs" --> MUSB
+        GMR -- " playbin &rarr; alsasink " --> ALSA
+        ALSA -- " snd-usb-audio:<br/>PCM &rarr; isoch. URBs " --> MUSB
     end
 
     subgraph MX3S["Topping MX3s (integrated amplifier)"]
@@ -45,23 +45,20 @@ flowchart LR
         SAV["<b>Savitech</b><br/><b>262a:196f</b><br/>USB audio bridge,<br/>ASYNC endpoint"]
         AKM["<b>AKM AK4377</b><br/>the DAC<br/>chip itself"]
         MA["<b>Infineon</b><br/><b>MA12070</b><br/>class D<br/>power stage"]
-        SAV -- "I2S" --> AKM
-        AKM -- "analog" --> MA
+        SAV -- " I2S " --> AKM
+        AKM -- " analog " --> MA
     end
 
     SPK(["speakers"])
-
-    SRC -- "UPnP / DLNA<br/>over the LAN" --> BBG
-    BBG -- "USB cable" --> MX3S
+    SRC -- " UPnP / DLNA<br/>over the LAN " --> BBG
+    BBG -- " USB cable " --> MX3S
     MX3S --> SPK
-
-    classDef host fill:#dbeafe,stroke:#1e3a8a,stroke-width:1px,color:#0b1220
-    classDef soft fill:#dcfce7,stroke:#166534,stroke-width:1px,color:#0b1220
-    classDef kern fill:#fef3c7,stroke:#92400e,stroke-width:1px,color:#0b1220
-    classDef digi fill:#ede9fe,stroke:#5b21b6,stroke-width:1px,color:#0b1220
-    classDef anlg fill:#ffe4e6,stroke:#9f1239,stroke-width:1px,color:#0b1220
-    classDef out  fill:#e5e7eb,stroke:#374151,stroke-width:1px,color:#0b1220
-
+    classDef host fill: #dbeafe, stroke: #1e3a8a, stroke-width: 1px, color: #0b1220
+    classDef soft fill: #dcfce7, stroke: #166534, stroke-width: 1px, color: #0b1220
+    classDef kern fill: #fef3c7, stroke: #92400e, stroke-width: 1px, color: #0b1220
+    classDef digi fill: #ede9fe, stroke: #5b21b6, stroke-width: 1px, color: #0b1220
+    classDef anlg fill: #ffe4e6, stroke: #9f1239, stroke-width: 1px, color: #0b1220
+    classDef out fill: #e5e7eb, stroke: #374151, stroke-width: 1px, color: #0b1220
     class SRC host
     class GMR soft
     class ALSA soft
@@ -70,9 +67,8 @@ flowchart LR
     class AKM digi
     class MA anlg
     class SPK out
-
-    style BBG fill:#f8fafc,stroke:#475569,stroke-width:2px,color:#0b1220
-    style MX3S fill:#fdf4ff,stroke:#86198f,stroke-width:2px,color:#0b1220
+    style BBG fill: #f8fafc, stroke: #475569, stroke-width: 2px, color: #0b1220
+    style MX3S fill: #fdf4ff, stroke: #86198f, stroke-width: 2px, color: #0b1220
 ```
 
 **The clock lives at the endpoint.** The playback endpoint enumerates as `ASYNC`: the DAC's own oscillator is
@@ -486,50 +482,10 @@ configuration, and set:
 preferred-format=WAV
 ```
 
-Then leave the DSP chain empty - no resampler, no volume normalisation, no ReplayGain at output - and
+Then leave the DSP chain empty - no resampler, no volume normaliza+
+tion, no ReplayGain at output - and
 start playback. The renderer negotiates the format when a stream begins, so a change here needs
 playback restarted, not just applied.
-
-### Why WAV and not the other two
-
-The plugin offers `FLAC`, `WAV` and `LPCM`, and defaults to FLAC. On this board that default is the
-wrong choice, and not by a small margin. Measured on the wire and at `hw_params`:
-
-| `preferred-format` |      wire | ALSA gets | DAC altset | decoder on the board | clicks  |
-|:-------------------|----------:|:----------|:-----------|:---------------------|:--------|
-| `FLAC` (default)   | ~272 KB/s | `S24_3LE` | 2          | yes, real-time FLAC  | **yes** |
-| `LPCM`             | ~176 KB/s | `S16_LE`  | 1          | no                   | no      |
-| `WAV`              | ~296 KB/s | `S24_3LE` | 2          | no                   | no      |
-
-~~**FLAC produces a periodic click.**~~ **Withdrawn 2026-09-05 - it was the kernel.** Kept below
-as originally written. WAV remains a perfectly reasonable choice, but it is no longer the fix for
-anything, and on CD-sourced material `LPCM` costs a third less on the bus for no loss at all.
-
-foobar2000 streams the whole session as a single FLAC of unknown
-length, and GStreamer 1.8.3 on this board does not survive it cleanly. The plugin's own configuration
-file warns about exactly this class of device: *"Many report that they support FLAC yet fail to play an
-infinite length FLAC stream"*. It also buys nothing here - foobar encodes at speed, so the FLAC stream
-measured *larger* than raw 24-bit PCM. The board spends cycles unpacking a stream that was never
-compressed.
-
-**LPCM is `audio/L16`, which is 16 bits by definition.** There is no 24-bit LPCM in this plugin, so
-choosing it silently halves the format ceiling. Fine for CD-rip material, a truncation for hi-res.
-
-**WAV keeps 24 bits and removes the decoder.** Same altset, same USB packet size, same bytes per frame
-as the FLAC path - only the decode is gone. That is why it is the right answer rather than a
-compromise, and why the click hunt used it as the deciding experiment: it changes one variable.
-
-On bit depth: match the material, do not maximise it. A 16-bit source padded to 24 gains nothing and
-costs half again as much bandwidth. And 32 bits cannot reach this DAC at all - `stream0` lists exactly
-two formats, `S16_LE` and `S24_3LE`, so a 32-bit stream only guarantees a conversion earlier in the
-chain.
-
-> **On DSD:** *(2026-09-05: half right. Native DSD indeed cannot work here. But DoP is not DSD as
-> far as this board is concerned - it is 24-bit PCM at 352.8 kHz with markers, GStreamer 1.8.3
-> carries it without knowing what it is, and DSD128 plays this way on the factory system once it
-> has a 5.10 kernel: 2 822 400 bytes/s on the bus, delivered at -69 ppm.)*
-> It does not work in this build, and cannot. GStreamer 1.8.3 has no DSD decoder (`dsddec`
-> arrived in 1.24), and the DAC has no DSD altsetting to receive it anyway. Feed it PCM.
 
 ## Hardware Maintenance Note
 
