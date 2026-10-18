@@ -193,6 +193,8 @@ is undone by that one control.
   `zero-length-WAV`, `send-accept-ranges`, `accept-ranges`, `reports-time`. There is no volume key
   in any spelling.
 
+![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png)
+
 So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the MX3s
 itself**, where the control is analog and downstream of the DAC. The state lives only in the running
 daemon's memory, so `systemctl restart gmediarender` unconditionally returns it to 100.
