@@ -489,6 +489,21 @@ tion, no ReplayGain at output - and
 start playback. The renderer negotiates the format when a stream begins, so a change here needs
 playback restarted, not just applied.
 
+## Or skip the configuration: go-upnp-player
+
+[![go-upnp-player playing to Valera](img/go-upnp-player.png)](https://github.com/panedrone/go-upnp-player)
+
+[go-upnp-player](https://github.com/panedrone/go-upnp-player) is a UPnP control point and media
+server in one Windows exe, with its UI in the browser (a phone on the same Wi-Fi works as a remote).
+There is nothing to configure, neither here nor on the PC: it finds Valera on the network, reads what
+the board accepts and plays to it. FLAC files go as they are; CUE images are cut into tracks on the PC
+and sent as WAV at their own rate and bit depth. The quirks of this board's gmrender are the player's
+problem, not yours: it restarts the pipeline the way foobar2000 does, waits a few seconds while the
+amplifier is still on another input, and a track moved to another device goes on from the same second.
+
+The two rules above still hold: its volume slider drives the same RenderingControl volume, so keep it
+at 100, and keep its equalizer off for a bit-perfect stream.
+
 ## Hardware Maintenance Note
 
 * **24/7 eMMC Operation:** This is an industrial embedded setup using solid internal flash. Power consumption is < 2W in
