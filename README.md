@@ -21,11 +21,11 @@ mixing, no volume scaling in software.
 Note what `hw:1,0` is *not* here. No I2S DAC is attached to this board. The AM335x McASP peripheral - the SoC's
 native I2S engine, brought out on the P9 header - is unused, and onboard audio is stripped via device tree
 overlays. The endpoint is an external asynchronous USB device, so the DMA transfer feeds the FIFO of the MUSB
-USB 2.0 host controller. I2S does exist in this chain, but inside the MX3s, downstream of the USB bridge.
+USB 2.0 host controller. I2S does exist in this chain, but inside the DAC, downstream of the USB bridge.
 
-The MX3s itself is an integrated amplifier, not a DAC box: the Savitech bridge hands I2S to an AKM AK4377,
-and its analog output drives an Infineon MA12070 class D power stage. Everything past the USB cable is one
-sealed unit - the diagram below shows it only to place the I2S link where it actually is.
+Everything past the USB cable is one sealed unit: the XMOS bridge hands I2S to the converter, and its analog
+output drives the amplifier stage. The diagram below shows the inside of it only to place the I2S link where
+it actually is.
 
 ```mermaid
 flowchart LR
@@ -40,19 +40,19 @@ flowchart LR
         ALSA -- " snd-usb-audio:<br/>PCM &rarr; isoch. URBs " --> MUSB
     end
 
-    subgraph MX3S["Topping MX3s (integrated amplifier)"]
+    subgraph DAC["SMSL RAW-HA1"]
         direction TB
-        SAV["<b>Savitech</b><br/><b>262a:196f</b><br/>USB audio bridge,<br/>ASYNC endpoint"]
-        AKM["<b>AKM AK4377</b><br/>the DAC<br/>chip itself"]
-        MA["<b>Infineon</b><br/><b>MA12070</b><br/>class D<br/>power stage"]
+        SAV["<b>Thesycon/XMOS</b><br/><b>152a:85dd</b><br/>USB audio bridge,<br/>ASYNC endpoint"]
+        AKM["<b>the converter</b><br/>PCM to 768 kHz,<br/>native DSD"]
+        MA["<b>analog out</b><br/>amplifier stage"]
         SAV -- " I2S " --> AKM
         AKM -- " analog " --> MA
     end
 
     SPK(["speakers"])
     SRC -- " UPnP / DLNA<br/>over the LAN " --> BBG
-    BBG -- " USB cable " --> MX3S
-    MX3S --> SPK
+    BBG -- " USB cable " --> DAC
+    DAC --> SPK
     classDef host fill: #dbeafe, stroke: #1e3a8a, stroke-width: 1px, color: #0b1220
     classDef soft fill: #dcfce7, stroke: #166534, stroke-width: 1px, color: #0b1220
     classDef kern fill: #fef3c7, stroke: #92400e, stroke-width: 1px, color: #0b1220
@@ -68,7 +68,7 @@ flowchart LR
     class MA anlg
     class SPK out
     style BBG fill: #f8fafc, stroke: #475569, stroke-width: 2px, color: #0b1220
-    style MX3S fill: #fdf4ff, stroke: #86198f, stroke-width: 2px, color: #0b1220
+    style DAC fill: #fdf4ff, stroke: #86198f, stroke-width: 2px, color: #0b1220
 ```
 
 **The clock lives at the endpoint.** The playback endpoint enumerates as `ASYNC`: the DAC's own oscillator is
@@ -132,6 +132,36 @@ sudo ./valera_deploy.py
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
 unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
 
+## Configure foobar2000 on Windows 11
+
+**The renderer is not configured under `Output -> Devices`.** That page lists local sound cards, and its
+bit-depth setting has no effect whatsoever on a UPnP renderer - the stream format is decided by the
+plugin. Go to `Preferences -> Playback -> Output -> UPnP MediaRenderer Output`, which is a text
+configuration, and set:
+
+```
+preferred-format=WAV
+```
+
+Then leave the DSP chain empty - no resampler, no volume normalization, no ReplayGain at output - and
+start playback. The renderer negotiates the format when a stream begins, so a change here needs
+playback restarted, not just applied.
+
+## Or skip the configuration: go-upnp-player
+
+[![go-upnp-player playing to Valera](img/go-upnp-player.png)](https://github.com/panedrone/go-upnp-player)
+
+[go-upnp-player](https://github.com/panedrone/go-upnp-player) is a UPnP control point and media
+server in one Windows exe, with its UI in the browser (a phone on the same Wi-Fi works as a remote).
+There is nothing to configure, neither here nor on the PC: it finds Valera on the network, reads what
+the board accepts and plays to it. FLAC files go as they are; CUE images are cut into tracks on the PC
+and sent as WAV at their own rate and bit depth. The quirks of this board's gmrender are the player's
+problem, not yours: it restarts the pipeline the way foobar2000 does, waits a few seconds while the
+amplifier is still on another input, and a track moved to another device goes on from the same second.
+
+The two rules above still hold: its volume slider drives the same RenderingControl volume, so keep it
+at 100, and keep its equalizer off for a bit-perfect stream.
+
 ## Network & End-Point Visibility
 
 Ensure the UPnP/DLNA endpoint advertises itself properly across the local network segment.
@@ -180,7 +210,7 @@ foobar2000's volume control is wired straight to this renderer: `foo_out_upnp.dl
 `UPnP Volume Control`, `SetVolume`, `SetMute`, `VolumeMin`/`VolumeMax` and subscribes to
 `urn:schemas-upnp-org:service:RenderingControl:*`. Moving that slider sends SOAP to the board,
 gmediarender puts the value on `playbin`'s `volume` property, and every sample gets multiplied in
-floating point. Everything else documented here - `hw:1,0`, no dmix, WAV over FLAC, matching altset -
+floating point. Everything else documented here - `hw:1,0`, no dmix, no resampling, matching altset -
 is undone by that one control.
 
 **It cannot be switched off from either side.**
@@ -193,28 +223,22 @@ is undone by that one control.
   `zero-length-WAV`, `send-accept-ranges`, `accept-ranges`, `reports-time`. There is no volume key
   in any spelling.
 
-![valera-in-topping-mx3s.png](img/valera-in-topping-mx3s.png)
-
-So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the MX3s
+So it is a discipline, not a setting: **leave the renderer at 100 and change loudness on the amplifier
 itself**, where the control is analog and downstream of the DAC. The state lives only in the running
 daemon's memory, so `systemctl restart gmediarender` unconditionally returns it to 100.
 
-The MX3s does also expose a digital volume of its own over USB Audio Class, separate from UPnP and
-untouched by foobar2000:
+Worth knowing that some USB DACs add a second, independent attenuation over USB Audio Class - a mixer
+element the host can move, separate from UPnP and untouched by the player:
 
 ```bash
 amixer -c 1 sget PCM
 
 ```
 
-    Simple mixer control 'PCM',0
-      Capabilities: pvolume pswitch pswitch-joined
-      Limits: Playback 0 - 15
-      Front Left: Playback 15 [100%] [0.00dB] [on]
-
-Confirm it reads `[0.00dB]` - that is the Savitech bridge not attenuating. It is worth checking once
-and then leaving alone: sixteen steps across the whole range is a mute switch with pretensions, not a
-volume control.
+The RAW-HA1 exposes no such element, so there is nothing to get wrong and the command finds nothing.
+On a DAC that does expose one, check it reads `[0.00dB]` once and then leave it alone - a dozen or so
+steps across the whole range is a mute switch with pretensions, not a volume control, and a fresh
+`alsa-utils` install can land it mid-scale and send you hunting through the amplifier.
 
 * **Ping the board locally to verify zero-latency connection:**
 
@@ -234,10 +258,10 @@ aplay -l
 
 ```
 
-    **** List of PLAYBACK Hardware Devices ****
-    card 1: MX3s [MX3s], device 0: USB Audio [USB Audio]
-      Subdevices: 1/1
-      Subdevice #0: subdevice #0
+One `USB Audio` device and nothing else - there is no onboard codec on this board to compete with it.
+Read the card index out of this listing rather than assuming it: with no onboard audio the DAC takes
+whatever index is free, `1` on the factory eMMC image and `0` on a current one, and every `/proc`
+path below is built from that number.
 
 * **Inspect stream routing directly from the kernel ring buffer:**
 
@@ -253,18 +277,17 @@ dmesg | grep -i alsa
 > High-fidelity rendering is offloaded entirely to the external asynchronous USB DAC subsystem, which maps dynamically
 > post-boot. Always use `aplay -l` to verify live endpoints.
 
-* **Identify the USB bridge inside the MX3s:**
+* **Identify the USB bridge inside the DAC:**
 
 ```bash
 lsusb
 
 ```
 
-    Bus 001 Device 002: ID 262a:196f
-    Bus 001 Device 001: ID 1d6b:0002 Linux Foundation 2.0 root hub
-
-Vendor `262a` is SAVITECH - the USB-to-I2S bridge inside the MX3s. (`152a` would mean Thesycon/XMOS, `0d8c`
-C-Media.) Which bridge it is matters far less than how its endpoint is clocked, which is the next check.
+The bus and device numbers change on every replug; the `ID vendor:product` pair is the part to read.
+This board's `lsusb` has no name database, so the id is all you get: `152a` is Thesycon/XMOS, `262a`
+SAVITECH, `0d8c` C-Media. Which bridge it is matters far less than how its endpoint is clocked,
+which is the next check.
 
 * **Verify the endpoint is asynchronous and list what the DAC actually accepts:**
 
@@ -273,38 +296,12 @@ cat /proc/asound/card1/stream0
 
 ```
 
-    TOPPING MX3s at usb-musb-hdrc.1-1, high speed : USB Audio
-
-    Playback:
-      Status: Running
-        Interface = 2
-        Altset = 2
-        Momentary freq = 44100 Hz (0x5.8333)
-        Feedback Format = 16.16
-      Interface 2
-        Altset 1
-        Format: S16_LE
-        Channels: 2
-        Endpoint: 3 OUT (ASYNC)
-        Rates: 44100, 48000, 88200, 96000, 176400, 192000
-        Data packet interval: 125 us
-      Interface 2
-        Altset 2
-        Format: S24_3LE
-        Channels: 2
-        Endpoint: 3 OUT (ASYNC)
-        Rates: 44100, 48000, 88200, 96000, 176400, 192000
-        Data packet interval: 125 us
-
-> **Hardware ceiling - read this before tuning anything upstream.** *(2026-09-05: this describes the
-> Topping MX3s. A different DAC on the same board reports `S32_LE` only, with a native DSD altsetting
-> and rates to 768 kHz - see *A second endpoint: SMSL RAW-HA1* below, and read your own `stream0`
-> rather than assuming these numbers.)* The DAC
-> exposes exactly two formats,
-> `S16_LE` and `S24_3LE`, and tops out at 192 kHz. There is no 32-bit altsetting and no DSD altsetting on this
-> device. Feeding it 32-bit or DSD unlocks nothing; it only guarantees a conversion somewhere earlier in the
-> chain. Note also `Feedback Format` - that is the DAC telling the host how fast to send, which is asynchronous
-> mode doing its job.
+This is the single most useful file on the board, and *The endpoint: SMSL RAW-HA1* below walks through
+a full dump of it. Three things to find: `(ASYNC)` on the playback endpoint, which means the DAC owns
+the clock; the rate and format list, which is the hardware ceiling and no setting upstream can raise
+it; and a `Sync Endpoint` or `Feedback Format` line, which is the DAC telling the host how fast to
+send. Read your own output rather than assuming any numbers quoted here - that list is a property of
+whatever is plugged in, not of this board.
 
 * **Prove nothing is resampling, and see which format the sender actually chose - run this while a
   track is playing:**
@@ -314,28 +311,18 @@ cat /proc/asound/card1/pcm0p/sub0/hw_params
 
 ```
 
-    access: RW_INTERLEAVED
-    format: S24_3LE
-    subformat: STD
-    channels: 2
-    rate: 44100 (44100/1)
-    period_size: 441
-    buffer_size: 8820
+It prints `access`, `format`, `channels`, `rate`, `period_size` and `buffer_size` for the stream that
+is open right now, and the field that matters is `rate`: it must match the source file. A 96 kHz file
+reporting `rate: 44100` means GStreamer inserted a resampler, and no setting in `/etc/asound.conf` can
+fix that - `playbin` builds its own `audioconvert` and `audioresample` a layer above ALSA. This file is
+the only honest proof of a bit-perfect path; the launch flags are not.
 
-The `rate` must match the source file. A 96 kHz file reporting `rate: 44100` means GStreamer inserted a
-resampler, and no setting in `/etc/asound.conf` can fix that - `playbin` builds its own `audioconvert` and
-`audioresample` a layer above ALSA. This file is the only honest proof of a bit-perfect path; the launch flags
-are not.
+`format` is less informative on this DAC than it looks. Every altsetting carries a 4-byte slot, so ALSA
+reports `S32_LE` whatever the sender chose, and 16-bit material is indistinguishable from 24-bit here.
+On a DAC that exposes narrower formats, `format` does follow what the player decided to stream - a
+setting that lives on the PC, not here - and is the fastest way to see it.
 
-It is also the fastest way to see what the sender is really doing, because `format` follows whatever
-foobar2000's UPnP plugin decided to stream - a setting that lives on the PC, not here:
-
-| `format` says | the plugin is sending                                                            | DAC altset |
-|:--------------|:---------------------------------------------------------------------------------|:-----------|
-| `S24_3LE`     | 24-bit, via `preferred-format=WAV` (or the FLAC default)                         | 2          |
-| `S16_LE`      | 16-bit, via `preferred-format=LPCM` - that is `audio/L16`, 16 bits by definition | 1          |
-
-Cross-check it against the wire, which settles the FLAC-versus-WAV question without guessing:
+Either way, cross-check against the wire, which settles the FLAC-versus-WAV question without guessing:
 
 ```bash
 a=$(awk '/eth0:/{print $2}' /proc/net/dev); sleep 8; b=$(awk '/eth0:/{print $2}' /proc/net/dev); echo $(( (b-a)/8 )) bytes/s
@@ -372,14 +359,12 @@ htop
 
 *(Install via `sudo apt install htop` if missing).*
 
-## A second endpoint: SMSL RAW-HA1
+## The endpoint: SMSL RAW-HA1
 
 ![SMSL RAW-HA1](img/smsl_raw-ha1.png)
 
-Worth documenting alongside the MX3s, because the two are different classes of
-device and the board treats them differently. This one carries a **Thesycon/XMOS
-bridge, `152a:85dd`**, against the MX3s's Savitech `262a:196f`. On kernel 5.10
-`stream0` describes it in far more detail than the factory kernel ever did:
+It carries a **Thesycon/XMOS bridge, `152a:85dd`**. On kernel 5.10 `stream0`
+describes it in far more detail than the factory kernel ever did:
 
 ```bash
 cat /proc/asound/card1/stream0
@@ -414,33 +399,26 @@ feedback endpoint stated explicitly - the factory kernel only ever printed
 inside a 32-bit slot**, which is why ALSA offers only `S32_LE` in both. And
 altset 3 is **native DSD**, which this DAC has in hardware.
 
-Against the MX3s, from `lsusb -v`:
+What `lsusb -v` adds, in short:
 
-|                            | Topping MX3s                    | SMSL RAW-HA1                    |
-|:---------------------------|:--------------------------------|:--------------------------------|
-| bridge                     | Savitech `262a:196f`            | Thesycon/XMOS `152a:85dd`       |
-| formats ALSA sees          | `S16_LE`, `S24_3LE`             | `S32_LE` only                   |
-| `bSubslotSize`             | 2 or 3 bytes                    | **4 bytes in every altsetting** |
-| bits carried               | 16 / 24                         | 24 or 32 in a 32-bit slot       |
-| top rate                   | 192 kHz                         | **768 kHz**                     |
-| DSD                        | none                            | **native, `DSD_U32_BE`**        |
-| `wMaxPacketSize`           | 104 / 156 bytes                 | **776 bytes**                   |
-| volume control on the host | `PCM Playback Volume`, 16 steps | none at all                     |
+| bridge            | Thesycon/XMOS `152a:85dd`       |
+|:------------------|:--------------------------------|
+| formats ALSA sees | `S32_LE` only                   |
+| `bSubslotSize`    | **4 bytes in every altsetting** |
+| bits carried      | 24 or 32 in a 32-bit slot       |
+| top rate          | **768 kHz**                     |
+| DSD               | **native, `DSD_U32_BE`**        |
+| `wMaxPacketSize`  | **776 bytes**                   |
+| host volume       | none at all                     |
 
-The last row matters in practice. The MX3s exposes a mixer element, and a fresh
-`alsa-utils` install found it at **8 of 15, which is -21 dB** - quiet enough to
-send anyone hunting through the amplifier before thinking to check `amixer`. The
-RAW-HA1 exposes nothing, so there is no digital attenuation to get wrong:
-
-```bash
-amixer -c 1 sget PCM
-
-```
+The last row matters in practice: the device exposes no mixer element, so there
+is no digital attenuation on the host to get wrong, and `amixer` finds nothing
+to set.
 
 The 776-byte packet is the device declaring what it needs at 768 kHz, and the
-host reserves that whether or not it is used. On the factory kernel this looked
-like the reason the more capable DAC behaved worse; on 5.10 both run at ratio
-1.0000 and the reservation costs nothing.
+host reserves that whether or not it is used. On the factory kernel that
+reservation looked like the reason this DAC behaved worse than a lesser one; on
+5.10 it runs at ratio 1.0000 and the reservation costs nothing.
 
 ### DSD without a DSD decoder
 
@@ -472,37 +450,6 @@ anywhere in the chain destroys the markers outright, so the renderer must be at
 Whether the player sends DoP or converts DSD to PCM itself is decided on the PC.
 Both work here; `hw_params` says which is happening - `352800` for DoP, `44100`
 for a conversion.
-
-## Configure foobar2000 on Windows 11
-
-**The renderer is not configured under `Output -> Devices`.** That page lists local sound cards, and its
-bit-depth setting has no effect whatsoever on a UPnP renderer - the stream format is decided by the
-plugin. Go to `Preferences -> Playback -> Output -> UPnP MediaRenderer Output`, which is a text
-configuration, and set:
-
-```
-preferred-format=WAV
-```
-
-Then leave the DSP chain empty - no resampler, no volume normaliza+
-tion, no ReplayGain at output - and
-start playback. The renderer negotiates the format when a stream begins, so a change here needs
-playback restarted, not just applied.
-
-## Or skip the configuration: go-upnp-player
-
-[![go-upnp-player playing to Valera](img/go-upnp-player.png)](https://github.com/panedrone/go-upnp-player)
-
-[go-upnp-player](https://github.com/panedrone/go-upnp-player) is a UPnP control point and media
-server in one Windows exe, with its UI in the browser (a phone on the same Wi-Fi works as a remote).
-There is nothing to configure, neither here nor on the PC: it finds Valera on the network, reads what
-the board accepts and plays to it. FLAC files go as they are; CUE images are cut into tracks on the PC
-and sent as WAV at their own rate and bit depth. The quirks of this board's gmrender are the player's
-problem, not yours: it restarts the pipeline the way foobar2000 does, waits a few seconds while the
-amplifier is still on another input, and a track moved to another device goes on from the same second.
-
-The two rules above still hold: its volume slider drives the same RenderingControl volume, so keep it
-at 100, and keep its equalizer off for a bit-perfect stream.
 
 ## Hardware Maintenance Note
 
