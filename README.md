@@ -77,12 +77,15 @@ playback restarted, not just applied.
 [![go-upnp-player playing to Valera](img/go-upnp-player.png)](https://github.com/panedrone/go-upnp-player)
 
 [go-upnp-player](https://github.com/panedrone/go-upnp-player) is a UPnP control point and media
-server in one Windows exe, with its UI in the browser (a phone on the same Wi-Fi works as a remote).
-There is nothing to configure, neither here nor on the PC: it finds Valera on the network, reads what
-the board accepts and plays to it. FLAC files go as they are; CUE images are cut into tracks on the PC
-and sent as WAV at their own rate and bit depth. The quirks of this board's gmrender are the player's
-problem, not yours: it restarts the pipeline the way foobar2000 does, waits a few seconds while the
-amplifier is still on another input, and a track moved to another device goes on from the same second.
+server in one program. On Windows it installs with a window of its own (or a native Qt window); on
+Linux it is one `go install`; and the page works from any browser, a phone on the same Wi-Fi as a
+remote. There is nothing to configure, neither here nor on the PC: it finds Valera on the network,
+reads what the board accepts and plays to it. FLAC files and CUE images are decoded on the PC and
+sent as WAV with the original samples, at their own rate and bit depth; an album goes as one
+gapless stream. The quirks of this board's gmrender are the player's problem, not yours: every step
+is sent only once the board reports the previous one done, Stop is a real Stop, a start is retried
+for a few seconds while the amplifier is still on another input, and a track moved to another device
+goes on from the same second.
 
 The two rules above still hold: its volume slider drives the same RenderingControl volume, so keep it
 at 100, and keep its equalizer off for a bit-perfect stream.
