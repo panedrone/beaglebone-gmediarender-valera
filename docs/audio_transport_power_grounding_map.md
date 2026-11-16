@@ -100,7 +100,26 @@ carries two Accusilicon AS318B oscillators, 45.1584 and 49.152 MHz, in metal can
   has no such input (its HDMI is, as far as the board markings tell, ARC - S/PDIF again).
 
 What coax costs compared with the DAC's USB input: the asynchronous clock (the DAC's own oscillator
-as master), and everything above 192 kHz - so DoP stops at DSD64; DSD128 over DoP needs 352.8 kHz.
+as master), and everything above 192 kHz.
+
+### DSD through the card
+
+| what is sent                       | rate on the wire | over the RAW-HA1's USB input           | through the card over coax |
+|:-----------------------------------|-----------------:|:---------------------------------------|:---------------------------|
+| DoP64                              |        176.4 kHz | expected, not checked separately       | expected, not checked      |
+| DoP128                             |        352.8 kHz | **played**, display `DoP 5.6448 MHz`   | does not fit S/PDIF        |
+| DSD of any rate converted to PCM   |  up to 176.4 kHz | expected (PCM to 192 kHz measured)     | **plays** (go-upnp-player) |
+| native DSD                         |                - | never reached from any source here     | impossible over S/PDIF     |
+
+"Expected" means it fits the link's rate and nothing in the path should touch it, but nobody has
+played it and looked at the display yet.
+
+DoP128 on the display was foobar2000 → Valera → the RAW-HA1's USB input, measured on the board
+([SMSL-RAW-HA1.md](SMSL-RAW-HA1.md), *DSD without a DSD decoder*). Through the card, DSD128 plays only
+converted: [go-upnp-player](https://github.com/panedrone/go-upnp-player) converts DSF/DFF to 24-bit
+PCM, 176.4 kHz by default
+([its ADR-028](https://github.com/panedrone/go-upnp-player/blob/master/docs/adr-028-dsd-converted-to-pcm-in-the-player.md)),
+and foobar2000 does the same with foo_input_sacd set to PCM output.
 
 ---
 

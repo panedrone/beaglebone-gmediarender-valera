@@ -3,7 +3,8 @@
 **Date:** 2026-11-16
 
 **Status:** accepted and in use. **Not closed:** (1) the RCA shell continuity check on the card has
-not been done; (2) whether the board's VBUS still reaches the card has not been checked.
+not been done; (2) whether the board's VBUS still reaches the card has not been checked; (3) DoP64
+has not been played through the card (DSD converted to PCM by go-upnp-player plays, 2026-11-16).
 
 How the chain is wired now is in
 [audio_transport_power_grounding_map.md](audio_transport_power_grounding_map.md); this record is about
@@ -51,7 +52,19 @@ current at HF through its inter-winding capacitance.
 
 * The asynchronous clock is lost: the DAC chip runs from the RAW-HA1's receiver PLL. The AS318B
   contribute only the slow jitter below the PLL's corner.
-* 192 kHz ceiling: DoP stops at DSD64; DSD128 over DoP (352.8 kHz) no longer plays.
+* 192 kHz ceiling, and with it DSD128 over DoP. Over the RAW-HA1's USB input it did play: foobar2000
+  → Valera → USB, the amplifier's display reading `DoP 5.6448 MHz` and `hw_params` on the board
+  352800 Hz ([SMSL-RAW-HA1.md](SMSL-RAW-HA1.md), *DSD without a DSD decoder*). Over coax 352.8 kHz
+  does not fit. What still plays through the card:
+  * **DoP64** - 176.4 kHz, display `DoP 2.8224 MHz`, bit-exact to the DAC. Needs the renderer at
+    volume 100 and no resampling, as any DoP. Fits the link; not played through the card yet.
+  * **DSD of any rate converted to PCM** - [go-upnp-player](https://github.com/panedrone/go-upnp-player)
+    converts DSF/DFF itself, 24-bit at 176.4 kHz by default
+    ([its ADR-028](https://github.com/panedrone/go-upnp-player/blob/master/docs/adr-028-dsd-converted-to-pcm-in-the-player.md)),
+    so DSD128 reaches the card as PCM and fits under 192 kHz. foobar2000 does the same with
+    foo_input_sacd set to PCM output. Played through the card from go-upnp-player, 2026-11-16.
+* Native DSD (the RAW-HA1's `DSD_U32_BE` altset) never went anywhere in this project, and S/PDIF
+  cannot carry it at all.
 
 ## Open check: RCA shell continuity
 
