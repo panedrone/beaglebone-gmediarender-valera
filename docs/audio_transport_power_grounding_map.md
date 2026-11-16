@@ -127,21 +127,23 @@ and foobar2000 does the same with foo_input_sacd set to PCM output.
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontSize": "16px", "textColor": "#0b1220", "lineColor": "#64748b", "edgeLabelBackground": "#ffffff"}}}%%
-flowchart TB
-    MAINS(["230 V AC mains"])
-
-    subgraph LPS["LHY Audio 15W/5V linear supply"]
+flowchart LR
+    subgraph LPS["Linear supply"]
         direction TB
+        MAINS(["230 V AC mains"])
         TOR["<b>Talema toroid</b><br/>no Y-capacitor,<br/>small inter-winding C"]
         REG["<b>LT1085CT</b><br/>5 V"]
-        TOR --> REG
+        LEADS["<b>two 5 V leads</b><br/>1: board<br/>2: card"]
+        MAINS --> TOR --> REG --> LEADS
     end
 
-    subgraph DOM["One ground domain, fed only by the linear supply"]
+    subgraph DOM["One ground domain"]
         direction TB
+        NET(["LAN switch<br/>Ethernet, UTP only"])
         BBG["<b>BeagleBone Green</b><br/>gmediarender,<br/>ALSA hw:1,0"]
         AMA["<b>Amanero-type card</b><br/>Combo384 clone,<br/>AS318B 45.1584 / 49.152"]
         XF["<b>pulse transformer</b><br/>isolates at DC,<br/>pF at HF"]
+        NET --> BBG
         BBG -- " USB: D+/D-, GND<br/>(VBUS: unchecked) " --> AMA
         AMA --> XF
     end
@@ -151,18 +153,12 @@ flowchart TB
         RX["<b>S/PDIF receiver</b><br/>PLL clock recovery"]
         CONV["<b>DAC chip</b><br/>digital to analog,<br/>clocked by the PLL"]
         AMP["<b>class-D amplifier</b>"]
-        RX --> CONV --> AMP
+        SPK(["speakers"])
+        RX --> CONV --> AMP --> SPK
     end
 
-    NET(["LAN switch"])
-    SPK(["speakers"])
-
-    MAINS --> TOR
-    REG -- " 5 V lead 1 " --> BBG
-    REG -- " 5 V lead 2 " --> AMA
-    NET -- " Ethernet, UTP only " --> BBG
-    XF -- " coax S/PDIF<br/>(RCA shell: unchecked) " --> RX
-    AMP --> SPK
+    LPS -- " 2 x 5 V " --> DOM
+    DOM -- " coax S/PDIF<br/>(RCA shell:<br/>unchecked) " --> DAC
 
     classDef mains fill: #fee2e2, stroke: #991b1b, stroke-width: 1px, color: #0b1220
     classDef power fill: #fef3c7, stroke: #92400e, stroke-width: 1px, color: #0b1220
@@ -172,7 +168,7 @@ flowchart TB
     classDef anlg fill: #ffe4e6, stroke: #9f1239, stroke-width: 1px, color: #0b1220
     classDef out fill: #e5e7eb, stroke: #374151, stroke-width: 1px, color: #0b1220
     class MAINS mains
-    class TOR,REG power
+    class TOR,REG,LEADS power
     class BBG,AMA digi
     class XF iso
     class RX,CONV dac
