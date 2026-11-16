@@ -4,7 +4,10 @@
 
 **Status:** accepted and in use. **Not closed:** (1) the RCA shell continuity check on the card has
 not been done; (2) whether the board's VBUS still reaches the card has not been checked; (3) DoP64
-has not been played through the card (DSD converted to PCM by go-upnp-player plays, 2026-11-16).
+has not been played through the card (DSD converted to PCM by go-upnp-player plays, 2026-11-16);
+(4) the CM6631A board has not been tried on its own lead from the linear supply, which is what
+separates "the supply decides" from "the Amanero board itself" - see *Open check: CM6631A on the
+linear supply*.
 
 How the chain is wired now is in
 [audio_transport_power_grounding_map.md](audio_transport_power_grounding_map.md); this record is about
@@ -49,6 +52,17 @@ current at HF through its inter-winding capacitance.
 * **Toslink.** Complete isolation with no capacitance; more jitter. Not adopted.
 * **Card powered from USB (VBUS) or from a separate supply.** Brings a second leakage source or the
   board's supply onto the card's ground. Rejected by ear.
+* **CM6631A pro board instead of the Amanero-type card** (tried 2026-11-16). C-Media CM6631A,
+  asynchronous UAC2, PCM to 192 kHz; coax through a Pulse transformer, Toslink, three oscillators
+  (45.1584, 49.152, 12 MHz) each on its own regulator. It has no power input of its own - the
+  micro-USB next to the USB-B is a second data input for Android phones (OTG) - so it runs on
+  Valera's VBUS. By ear, over coax: plays decently, but without the depth the Amanero-type card has
+  on its own lead from the linear supply. Not adopted. Not level-matched
+  ([ADR-002](adr-002-input-comparison-by-spl-meter.md)); `valera_rate_check.py` not run on it;
+  Toslink not tried.
+
+  The comparison changed two things at once, the board and its supply, so it does not yet say which
+  of them gives the depth. That is open item (4).
 
 ## Cost
 
@@ -80,3 +94,18 @@ USB-B shell / GND on the card.
 * **No continuity** - the isolation is as described. Close item (1) in the status line.
 * **Continuity** - record the finding here and in the grounding map; isolating the shell (isolated RCA
   socket, or a cut trace) becomes the next decision.
+
+## Open check: CM6631A on the linear supply
+
+Feed the CM6631A from the second 5 V lead of the linear supply through a split USB cable: data and
+GND from Valera, VBUS from the supply, Valera's VBUS cut. Easiest without soldering: a cheap USB
+cable opened in the middle, only the red wire (VBUS) cut, its CM6631A end joined to the supply's
++5 V in a Wago 221, its Valera end insulated and left unconnected; black, green, white and the shield
+untouched. Valera's VBUS must never meet the supply's +5 V - that puts two sources on one rail. The
+supply's ground needs no extra wire: it is already common through Valera.
+
+* **The depth appears** - the supply decides: any decent bridge on its own lead of the linear supply
+  does the job, and the Amanero-type card is not essential to this chain.
+* **It does not** - the difference is in the Amanero-type board itself.
+
+Either way, record the result here and close item (4).

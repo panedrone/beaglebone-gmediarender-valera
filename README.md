@@ -185,6 +185,8 @@ ping -c 4 beaglebone.local
   why coax and not the DAC's USB input, and what is still unchecked.
 * [docs/adr-002-input-comparison-by-spl-meter.md](docs/adr-002-input-comparison-by-spl-meter.md) -
   comparing the two inputs with test tones (`cli/gen_test_tones.py`) and a phone SPL meter.
+* [docs/fiio_sr11_hardware_audit_vs_bbg_amanero.md](docs/fiio_sr11_hardware_audit_vs_bbg_amanero.md) -
+  the FiiO SR11's board against this chain: clocks, power, coax isolation, a Toslink test.
 
 ## Low-Level Hardware & ALSA Diagnostics
 
