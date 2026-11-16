@@ -39,7 +39,9 @@ current at HF through its inter-winding capacitance.
 ## Alternatives rejected
 
 * **RAW-HA1 USB input directly.** Keeps the asynchronous clock, 768 kHz and DSD128 over DoP; bonds the
-  transport's ground onto a board shared with the class-D amplifier. Rejected by ear.
+  transport's ground onto a board shared with the class-D amplifier. Rejected by ear. Tried again
+  2026-11-16 with Valera on the linear supply: no hum, clean and bright, but thin in the bass. Not
+  level-matched; the measurement is [ADR-002](adr-002-input-comparison-by-spl-meter.md).
 * **High-speed USB isolator in front of the RAW-HA1's USB input** (ADuM4160 does not qualify, it is
   full-speed only). Would break the ground and keep async and DSD128. Not adopted: it leaves the
   DAC chip on the RAW-HA1's small local oscillators, which the card's AS318B at least feed through

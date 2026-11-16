@@ -183,6 +183,8 @@ ping -c 4 beaglebone.local
   in use: board and Amanero-type card on one linear supply, coaxial S/PDIF into the RAW-HA1.
 * [docs/adr-001-coax-via-amanero-instead-of-usb.md](docs/adr-001-coax-via-amanero-instead-of-usb.md) -
   why coax and not the DAC's USB input, and what is still unchecked.
+* [docs/adr-002-input-comparison-by-spl-meter.md](docs/adr-002-input-comparison-by-spl-meter.md) -
+  comparing the two inputs with test tones (`cli/gen_test_tones.py`) and a phone SPL meter.
 
 ## Low-Level Hardware & ALSA Diagnostics
 
