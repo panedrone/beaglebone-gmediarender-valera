@@ -126,39 +126,44 @@ and foobar2000 does the same with foo_input_sacd set to PCM output.
 ## 6. Topology
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "16px", "textColor": "#0b1220", "lineColor": "#64748b", "edgeLabelBackground": "#ffffff"}}}%%
+%%{init: {"theme": "base", "flowchart": {"rankSpacing": 30, "nodeSpacing": 25, "padding": 8}, "themeVariables": {"fontSize": "16px", "textColor": "#0b1220", "lineColor": "#64748b", "edgeLabelBackground": "#ffffff"}}}%%
 flowchart LR
     subgraph LPS["Linear supply"]
         direction TB
         MAINS(["230 V AC mains"])
-        TOR["<b>Talema toroid</b><br/>no Y-capacitor,<br/>small inter-winding C"]
+        TOR["<b>Talema toroid</b><br/>no Y-capacitor,<br/>small<br/>inter-winding C"]
         REG["<b>LT1085CT</b><br/>5 V"]
-        LEADS["<b>two 5 V leads</b><br/>1: board<br/>2: card"]
-        MAINS --> TOR --> REG --> LEADS
+        MAINS --> TOR --> REG
     end
 
-    subgraph DOM["One ground domain"]
+    subgraph VAL["Valera"]
         direction TB
-        NET(["LAN switch<br/>Ethernet, UTP only"])
+        NET(["LAN switch<br/>Ethernet,<br/>UTP only"])
         BBG["<b>BeagleBone Green</b><br/>gmediarender,<br/>ALSA hw:1,0"]
-        AMA["<b>Amanero-type card</b><br/>Combo384 clone,<br/>AS318B 45.1584 / 49.152"]
-        XF["<b>pulse transformer</b><br/>isolates at DC,<br/>pF at HF"]
         NET --> BBG
-        BBG -- " USB: D+/D-, GND<br/>(VBUS: unchecked) " --> AMA
-        AMA --> XF
+    end
+
+    subgraph AMA["Amanero-type card"]
+        direction TB
+        USB["<b>USB receiver</b><br/>Combo384 clone,<br/>Atmel + CPLD<br/>(VBUS: unchecked)"]
+        TX["<b>S/PDIF transmitter</b><br/>clocked by<br/>AS318B 45.1584<br/>/ 49.152 MHz"]
+        XF["<b>pulse transformer</b><br/>isolates at DC,<br/>pF at HF<br/>(RCA shell: unchecked)"]
+        USB --> TX --> XF
     end
 
     subgraph DAC["SMSL RAW-HA1"]
         direction TB
         RX["<b>S/PDIF receiver</b><br/>PLL clock recovery"]
-        CONV["<b>DAC chip</b><br/>digital to analog,<br/>clocked by the PLL"]
+        CONV["<b>DAC chip</b><br/>digital to analog,<br/>clocked by PLL"]
         AMP["<b>class-D amplifier</b>"]
         SPK(["speakers"])
         RX --> CONV --> AMP --> SPK
     end
 
-    LPS -- " 2 x 5 V " --> DOM
-    DOM -- " coax S/PDIF<br/>(RCA shell:<br/>unchecked) " --> DAC
+    LPS -- " 5 V " --> VAL
+    LPS -- " 5 V " --> AMA
+    VAL -- " USB,<br/>shared<br/>GND " --> AMA
+    AMA -- " coax " --> DAC
 
     classDef mains fill: #fee2e2, stroke: #991b1b, stroke-width: 1px, color: #0b1220
     classDef power fill: #fef3c7, stroke: #92400e, stroke-width: 1px, color: #0b1220
@@ -168,13 +173,14 @@ flowchart LR
     classDef anlg fill: #ffe4e6, stroke: #9f1239, stroke-width: 1px, color: #0b1220
     classDef out fill: #e5e7eb, stroke: #374151, stroke-width: 1px, color: #0b1220
     class MAINS mains
-    class TOR,REG,LEADS power
-    class BBG,AMA digi
+    class TOR,REG power
+    class BBG,USB,TX digi
     class XF iso
     class RX,CONV dac
     class AMP anlg
     class NET,SPK out
     style LPS fill: #fffbeb, stroke: #b45309, stroke-width: 2px, color: #0b1220
-    style DOM fill: #f8fafc, stroke: #475569, stroke-width: 2px, color: #0b1220
+    style VAL fill: #f8fafc, stroke: #475569, stroke-width: 2px, color: #0b1220
+    style AMA fill: #f0fdf4, stroke: #166534, stroke-width: 2px, color: #0b1220
     style DAC fill: #fdf4ff, stroke: #86198f, stroke-width: 2px, color: #0b1220
 ```
