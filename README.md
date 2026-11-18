@@ -77,12 +77,14 @@ playback restarted, not just applied.
 [![go-upnp-player playing to Valera](img/go-upnp-player.png)](https://github.com/panedrone/go-upnp-player)
 
 [go-upnp-player](https://github.com/panedrone/go-upnp-player) is a UPnP control point and media
-server in one program. On Windows it installs with a window of its own (or a native Qt window); on
-Linux it is one `go install`; and the page works from any browser, a phone on the same Wi-Fi as a
-remote. There is nothing to configure, neither here nor on the PC: it finds Valera on the network,
-reads what the board accepts and plays to it. FLAC files and CUE images are decoded on the PC and
-sent as WAV with the original samples, at their own rate and bit depth; an album goes as one
-gapless stream. The quirks of this board's gmrender are the player's problem, not yours: every step
+server in one program. On Windows it is a per-user setup (no administrator rights) or a zip with one
+exe; on Linux it is one `go install`. The player is a page in the browser, and it works from any
+browser on the home network, so a phone on the same Wi-Fi is a remote. There is nothing to
+configure, neither here nor on the PC: it finds Valera on the network, reads what the board accepts
+and plays to it. FLAC and WAV files, and FLAC or WAV images with CUE sheets, are decoded on the PC
+and sent as WAV with the original samples, at their own rate and bit depth; an album goes as one
+gapless stream. DSD files (`.dsf`, `.dff`) are converted to PCM on the PC, up to 192 kHz: the board
+and S/PDIF take no DSD, so that stream is not bit-perfect by nature. The quirks of this board's gmrender are the player's problem, not yours: every step
 is sent only once the board reports the previous one done, Stop is a real Stop, a start is retried
 for a few seconds while the amplifier is still on another input, and a track moved to another device
 goes on from the same second.
