@@ -56,9 +56,10 @@ sudo ./valera_deploy.py
 
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
 unit in `/etc/systemd/system`, with any legacy unit and drop-in purged), and waiting for your media stream.
-The unit is bound to the DAC's own card: unplug the DAC and systemd stops the renderer instead of respawning
-it every five seconds, and a udev rule starts it again when the card comes back
+Unplug the DAC and the renderer dies once instead of being respawned every five seconds; a udev rule starts it
+again when a card comes back
 ([docs/adr-003-renderer-follows-the-card-no-restart-loop.md](docs/adr-003-renderer-follows-the-card-no-restart-loop.md)).
+Changing the DAC means running the deploy again, so `/etc/asound.conf` names the right card.
 
 ## Configure foobar2000 on Windows 11
 
@@ -360,18 +361,15 @@ sudo systemctl status gmediarender
 There is no `Drop-In:` line: `valera_deploy.py` deletes `/etc/systemd/system/gmediarender.service.d` and writes
 the unit itself, so the override mechanism is deliberately out of the picture.
 
-The unit carries `Restart=no` and `BindsTo=` the card's device unit, whose name the deploy escapes from
-`/sys/class/sound/card<N>`. With the DAC off the bus the service therefore reads `inactive`, not `failed`, and
-nothing retries; it comes back on the udev event when the card does, in about ten seconds. To see the unit it
-is bound to:
+The unit carries `Restart=no`. With the DAC off the bus the daemon dies once and stays down instead of being
+respawned every five seconds, and the udev rule starts it again when a sound card appears — about ten seconds
+after the plug goes back in. A service that stays down with the card present is a real fault, not a missing
+device; the restart loop used to hide those (ADR-003).
 
-```bash
-systemctl list-units --type=device | grep -i sound
-
-```
-
-A service that stays down with the card present is a real fault, not a missing device — the restart loop used
-to hide those (ADR-003).
+The unit is deliberately **not** bound to the card's device unit. That was tried on 2026-11-19 and withdrawn
+the same day: the device unit's name carries the USB interface number, so switching between the RAW-HA1's
+direct USB input and the Amanero card (`1-1:1.0` → `1-1:1.1`) left systemd refusing to start the service with
+`Dependency failed`, and the renderer vanished from the network.
 
 * **Force immediate restart (applying overrides):**
 

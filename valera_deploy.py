@@ -18,9 +18,16 @@ wrong everywhere else:
 Amended 2026-11-19: the unit no longer restarts the daemon in a loop. With
 `Restart=always` and the DAC unplugged, gmediarender died on the missing ALSA
 device and systemd raised it again every 5 seconds, for as long as the cable
-was out. It is bound to the card's device unit instead: systemd stops the
-service when the card goes and a udev rule starts it when the card comes back.
-Nothing polls anything (ADR-003).
+was out. Now it is `Restart=no` and a udev rule starts the service when a
+sound card appears: the daemon dies once with the card and comes back with it,
+and nothing polls anything (ADR-003).
+
+The same day the first attempt at this also wrote `BindsTo=` the card's device
+unit, and that broke the renderer within the hour: the device unit's name
+carries the USB interface number, so swapping the RAW-HA1's direct USB
+connection for the Amanero card (1-1:1.0 -> 1-1:1.1) left systemd refusing to
+start the service at all, with "Dependency failed". The binding is gone; the
+udev rule never needed it.
 
 Run it with sudo. It detects the card, points ALSA straight at the hardware,
 installs the unit and starts the daemon.
@@ -42,22 +49,6 @@ FRIENDLY_NAME = "BeagleBone"
 def run(args, **kw):
     return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           universal_newlines=True, **kw)
-
-
-def card_device_unit(index):
-    """The systemd device unit of card `index`, or None.
-
-    systemd names a device unit after its sysfs path, escaped. There is no
-    shorter alias to lean on: /dev/snd/* nodes carry no systemd tag, so
-    dev-snd-pcmC1D0p.device exists but stays inactive and would bind the
-    service to a unit that never comes up.
-    """
-    path = "/sys/class/sound/card%d" % index
-    if not os.path.exists(path):
-        return None
-    out = run(["systemd-escape", "-p", "--suffix=device",
-               os.path.realpath(path)]).stdout.strip()
-    return out or None
 
 
 def find_card():
@@ -130,25 +121,16 @@ print("✅ " + (", ".join(removed) if removed else "nothing stale found."))
 
 # 5. The unit. No device in the flags — alsasink takes the default from
 #    /etc/asound.conf, which is where the card index already lives.
-#    The service is bound to the card instead of being restarted on a timer:
-#    without the card there is nothing for alsasink to open, and a daemon that
-#    dies and respawns every 5 seconds is noise on a box built to be quiet.
+#    `Restart=no` and nothing else: without the card there is nothing for
+#    alsasink to open, so the daemon dies once and stays down instead of being
+#    respawned every 5 seconds. The way back is the udev rule below.
 print("\n📝 Step 5: writing %s" % UNIT_PATH)
-device = card_device_unit(card)
-if device:
-    print("   bound to %s" % device)
-    binding = "BindsTo=%s\nAfter=%s\n" % (device, device)
-else:
-    # Without the device unit the binding would be a guess; a service that is
-    # not restarted at all is still better than one that respawns forever.
-    print("   ⚠️  no device unit for card %d: the service will not be bound to it" % card)
-    binding = ""
 with open(UNIT_PATH, "w") as fh:
     fh.write("""[Unit]
 Description=GMediaRender UPnP Renderer
 After=network-online.target sound.target
 Wants=network-online.target
-%s
+
 [Service]
 Type=simple
 ExecStart=/usr/bin/gmediarender -f "%s" -o gst --gstout-audiosink=alsasink
@@ -157,11 +139,10 @@ User=root
 
 [Install]
 WantedBy=multi-user.target
-""" % (binding, FRIENDLY_NAME))
+""" % FRIENDLY_NAME)
 print("✅ Unit written.")
 
-# 5b. The way back. BindsTo stops the service when the card goes; starting it
-#     again when the card returns is udev's job, on the event itself.
+# 5b. The way back: a card appearing starts the service, on the event itself.
 print("\n🔌 Step 5b: writing %s" % UDEV_RULE)
 with open(UDEV_RULE, "w") as fh:
     fh.write('# The renderer follows the sound card: no polling, no restart loop.\n'
