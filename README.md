@@ -56,8 +56,9 @@ sudo ./valera_deploy.py
 
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
 unit in `/etc/systemd/system`, with any legacy unit and drop-in purged), and waiting for your media stream.
-Unplug the DAC and the renderer dies once instead of being respawned every five seconds; a udev rule starts it
-again when a card comes back
+Unplug the DAC and the renderer is left alone instead of being respawned every five seconds: it stays in the
+control point's list and is playable again when a card comes back. It is rebuilt on that event only if it is
+still holding the sound device, which means the handle is dead
 ([docs/adr-003-renderer-follows-the-card-no-restart-loop.md](docs/adr-003-renderer-follows-the-card-no-restart-loop.md)).
 Changing the DAC means running the deploy again, so `/etc/asound.conf` names the right card.
 
@@ -365,6 +366,18 @@ The unit carries `Restart=no`. With the DAC off the bus the daemon dies once and
 respawned every five seconds, and the udev rule starts it again when a sound card appears — about ten seconds
 after the plug goes back in. A service that stays down with the card present is a real fault, not a missing
 device; the restart loop used to hide those (ADR-003).
+
+A second udev rule runs `/usr/local/sbin/gmediarender-card-gone` when the card leaves, and that helper
+restarts the service **only if it is the process holding a sound device**. A card coming and going is
+routine — the amplifier re-enumerates its USB input every time the remote switches inputs — and the
+renderer must survive it, both because it stays usable without a card and because a rebuild would hide it
+from the control point for the ten seconds it takes libupnp to bind. It is not belt and braces: the daemon
+dies with
+its card only while the card is playing. With a PCM left open after a stream ran out on its own, gmediarender
+survives the unplug holding a dead handle, and the USB isochronous stream runs on at ~8200 interrupts a
+second — measured three hours after an unplug, with nothing playing — until the service is restarted
+(ADR-003, *Amendment: the card leaving stops the service*). Should the handle ever be left behind anyway,
+`sudo systemctl restart gmediarender` releases it.
 
 The unit is deliberately **not** bound to the card's device unit. That was tried on 2026-11-19 and withdrawn
 the same day: the device unit's name carries the USB interface number, so switching between the RAW-HA1's

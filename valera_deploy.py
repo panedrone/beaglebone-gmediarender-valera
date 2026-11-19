@@ -29,6 +29,13 @@ connection for the Amanero card (1-1:1.0 -> 1-1:1.1) left systemd refusing to
 start the service at all, with "Dependency failed". The binding is gone; the
 udev rule never needed it.
 
+Amended again later the same day: a second udev rule stops the service when
+the card goes away. "The daemon dies with its card" turned out to be true only
+while the card is open and playing - with a PCM left open after a stream ran
+out, gmediarender survived the unplug holding a dead handle, and the USB
+isochronous stream ran on at ~8200 interrupts/s for three hours with nothing
+playing. Taking the service down on the remove event releases the handle.
+
 Run it with sudo. It detects the card, points ALSA straight at the hardware,
 installs the unit and starts the daemon.
 """
@@ -43,6 +50,7 @@ UNIT_PATH = "/etc/systemd/system/gmediarender.service"
 LEGACY_UNIT = "/lib/systemd/system/gmediarender.service"
 LEGACY_DROPIN = "/etc/systemd/system/gmediarender.service.d"
 UDEV_RULE = "/etc/udev/rules.d/90-gmediarender.rules"
+CARD_GONE_HELPER = "/usr/local/sbin/gmediarender-card-gone"
 FRIENDLY_NAME = "BeagleBone"
 
 
@@ -123,7 +131,8 @@ print("✅ " + (", ".join(removed) if removed else "nothing stale found."))
 #    /etc/asound.conf, which is where the card index already lives.
 #    `Restart=no` and nothing else: without the card there is nothing for
 #    alsasink to open, so the daemon dies once and stays down instead of being
-#    respawned every 5 seconds. The way back is the udev rule below.
+#    respawned every 5 seconds. Going down and coming back are both the udev
+#    rules below.
 print("\n📝 Step 5: writing %s" % UNIT_PATH)
 with open(UNIT_PATH, "w") as fh:
     fh.write("""[Unit]
@@ -147,9 +156,39 @@ print("\n🔌 Step 5b: writing %s" % UDEV_RULE)
 with open(UDEV_RULE, "w") as fh:
     fh.write('# The renderer follows the sound card: no polling, no restart loop.\n'
              'SUBSYSTEM=="sound", ACTION=="add", KERNEL=="card*", '
-             'ENV{SYSTEMD_WANTS}+="gmediarender.service"\n')
+             'ENV{SYSTEMD_WANTS}+="gmediarender.service"\n'
+             '# ...and when it leaves, the daemon is rebuilt only if it is holding a\n'
+             '# sound device - see the helper. Not stopped and not restarted blindly:\n'
+             '# the DAC also comes and goes when the amplifier is switched between its\n'
+             '# USB and coaxial inputs, and the renderer must stay in the list.\n'
+             'SUBSYSTEM=="sound", ACTION=="remove", KERNEL=="card*", '
+             'RUN+="%s"\n' % CARD_GONE_HELPER)
 run(["udevadm", "control", "--reload-rules"])
 print("✅ udev rule written.")
+
+# 5c. What the remove rule runs. The whole point is the condition: a card
+#     leaving is routine - the amplifier re-enumerates its USB input every time
+#     the remote switches inputs - and a renderer rebuilt on every such event
+#     drops out of the control point's list for ten seconds, which is exactly
+#     when somebody is reaching for it. The daemon only needs rebuilding when
+#     it is still holding a sound device, because that handle is now dead and
+#     the USB isochronous stream runs on at 8000 interrupts/s behind it.
+print("\n🧯 Step 5c: writing %s" % CARD_GONE_HELPER)
+with open(CARD_GONE_HELPER, "w") as fh:
+    fh.write("""#!/bin/sh
+# Run from udev when a sound card leaves the bus. Keep it quick: udev kills a
+# slow RUN+=.
+pid=$(/bin/systemctl show -p MainPID --value gmediarender.service 2>/dev/null)
+[ -n "$pid" ] && [ "$pid" != 0 ] || exit 0
+for fd in /proc/"$pid"/fd/*; do
+    case "$(readlink "$fd" 2>/dev/null)" in
+        /dev/snd/*) exec /bin/systemctl --no-block restart gmediarender.service ;;
+    esac
+done
+exit 0
+""")
+os.chmod(CARD_GONE_HELPER, 0o755)
+print("✅ Helper written.")
 
 # 6. Go.
 print("\n🔄 Step 6: reloading systemd and starting the daemon")
