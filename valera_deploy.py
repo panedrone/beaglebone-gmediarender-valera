@@ -15,6 +15,13 @@ wrong everywhere else:
     package ships none, so the unit belongs in /etc/systemd/system where it
     will not be argued with on upgrade.
 
+Amended 2026-11-19: the unit no longer restarts the daemon in a loop. With
+`Restart=always` and the DAC unplugged, gmediarender died on the missing ALSA
+device and systemd raised it again every 5 seconds, for as long as the cable
+was out. It is bound to the card's device unit instead: systemd stops the
+service when the card goes and a udev rule starts it when the card comes back.
+Nothing polls anything (ADR-003).
+
 Run it with sudo. It detects the card, points ALSA straight at the hardware,
 installs the unit and starts the daemon.
 """
@@ -28,12 +35,29 @@ import time
 UNIT_PATH = "/etc/systemd/system/gmediarender.service"
 LEGACY_UNIT = "/lib/systemd/system/gmediarender.service"
 LEGACY_DROPIN = "/etc/systemd/system/gmediarender.service.d"
+UDEV_RULE = "/etc/udev/rules.d/90-gmediarender.rules"
 FRIENDLY_NAME = "BeagleBone"
 
 
 def run(args, **kw):
     return subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                           universal_newlines=True, **kw)
+
+
+def card_device_unit(index):
+    """The systemd device unit of card `index`, or None.
+
+    systemd names a device unit after its sysfs path, escaped. There is no
+    shorter alias to lean on: /dev/snd/* nodes carry no systemd tag, so
+    dev-snd-pcmC1D0p.device exists but stays inactive and would bind the
+    service to a unit that never comes up.
+    """
+    path = "/sys/class/sound/card%d" % index
+    if not os.path.exists(path):
+        return None
+    out = run(["systemd-escape", "-p", "--suffix=device",
+               os.path.realpath(path)]).stdout.strip()
+    return out or None
 
 
 def find_card():
@@ -106,24 +130,45 @@ print("✅ " + (", ".join(removed) if removed else "nothing stale found."))
 
 # 5. The unit. No device in the flags — alsasink takes the default from
 #    /etc/asound.conf, which is where the card index already lives.
+#    The service is bound to the card instead of being restarted on a timer:
+#    without the card there is nothing for alsasink to open, and a daemon that
+#    dies and respawns every 5 seconds is noise on a box built to be quiet.
 print("\n📝 Step 5: writing %s" % UNIT_PATH)
+device = card_device_unit(card)
+if device:
+    print("   bound to %s" % device)
+    binding = "BindsTo=%s\nAfter=%s\n" % (device, device)
+else:
+    # Without the device unit the binding would be a guess; a service that is
+    # not restarted at all is still better than one that respawns forever.
+    print("   ⚠️  no device unit for card %d: the service will not be bound to it" % card)
+    binding = ""
 with open(UNIT_PATH, "w") as fh:
     fh.write("""[Unit]
 Description=GMediaRender UPnP Renderer
 After=network-online.target sound.target
 Wants=network-online.target
-
+%s
 [Service]
 Type=simple
 ExecStart=/usr/bin/gmediarender -f "%s" -o gst --gstout-audiosink=alsasink
-Restart=always
-RestartSec=5
+Restart=no
 User=root
 
 [Install]
 WantedBy=multi-user.target
-""" % FRIENDLY_NAME)
+""" % (binding, FRIENDLY_NAME))
 print("✅ Unit written.")
+
+# 5b. The way back. BindsTo stops the service when the card goes; starting it
+#     again when the card returns is udev's job, on the event itself.
+print("\n🔌 Step 5b: writing %s" % UDEV_RULE)
+with open(UDEV_RULE, "w") as fh:
+    fh.write('# The renderer follows the sound card: no polling, no restart loop.\n'
+             'SUBSYSTEM=="sound", ACTION=="add", KERNEL=="card*", '
+             'ENV{SYSTEMD_WANTS}+="gmediarender.service"\n')
+run(["udevadm", "control", "--reload-rules"])
+print("✅ udev rule written.")
 
 # 6. Go.
 print("\n🔄 Step 6: reloading systemd and starting the daemon")

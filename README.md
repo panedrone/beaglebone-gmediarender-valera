@@ -55,7 +55,10 @@ sudo ./valera_deploy.py
 ```
 
 When the log outputs the final **🎉 GOAL!!!**, the service is locked, loaded, armed in autostart (as a canonical
-unit in `/lib/systemd/system`, with any legacy drop-in purged), and waiting for your media stream.
+unit in `/etc/systemd/system`, with any legacy unit and drop-in purged), and waiting for your media stream.
+The unit is bound to the DAC's own card: unplug the DAC and systemd stops the renderer instead of respawning
+it every five seconds, and a udev rule starts it again when the card comes back
+([docs/adr-003-renderer-follows-the-card-no-restart-loop.md](docs/adr-003-renderer-follows-the-card-no-restart-loop.md)).
 
 ## Configure foobar2000 on Windows 11
 
@@ -343,7 +346,7 @@ sudo systemctl status gmediarender
 ```
 
     ● gmediarender.service - GMediaRender UPnP Renderer
-       Loaded: loaded (/lib/systemd/system/gmediarender.service; enabled; vendor preset: enabled)
+       Loaded: loaded (/etc/systemd/system/gmediarender.service; enabled; vendor preset: enabled)
        Active: active (running) since Thu 2026-06-25 22:45:59 UTC; 4h 27min ago
      Main PID: 1216 (gmediarender)
        CGroup: /system.slice/gmediarender.service
@@ -356,6 +359,19 @@ sudo systemctl status gmediarender
 
 There is no `Drop-In:` line: `valera_deploy.py` deletes `/etc/systemd/system/gmediarender.service.d` and writes
 the unit itself, so the override mechanism is deliberately out of the picture.
+
+The unit carries `Restart=no` and `BindsTo=` the card's device unit, whose name the deploy escapes from
+`/sys/class/sound/card<N>`. With the DAC off the bus the service therefore reads `inactive`, not `failed`, and
+nothing retries; it comes back on the udev event when the card does, in about ten seconds. To see the unit it
+is bound to:
+
+```bash
+systemctl list-units --type=device | grep -i sound
+
+```
+
+A service that stays down with the card present is a real fault, not a missing device — the restart loop used
+to hide those (ADR-003).
 
 * **Force immediate restart (applying overrides):**
 
